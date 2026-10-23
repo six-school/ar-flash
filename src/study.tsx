@@ -155,11 +155,7 @@ function Card({
       {entry.arabic}
     </Line>
   );
-  const rom = entry.romanization ? (
-    <Line key="rom" className="text-[0.7em] italic">
-      {entry.romanization}
-    </Line>
-  ) : null;
+  const rom = entry.romanization ? <Romanization key="rom" text={entry.romanization} /> : null;
   const english = <Line key="en">{entry.english}</Line>;
   const question = stack === "en-ar" ? [english] : [arabic];
   const answer = stack === "en-ar" ? [english, arabic, rom] : [arabic, rom, english];
@@ -255,31 +251,67 @@ function Face({ back, children }: { back?: boolean; children: ReactNode }) {
   );
 }
 
-/** A line of card text. Lines wrap only at spaces, so the text shrinks rather than split a word. */
+/**
+ * The transliteration starts blurred. A tap or click toggles it; on devices with a mouse,
+ * hovering unblurs it until the pointer leaves (Tailwind's `hover:` only applies where hover exists).
+ */
+function Romanization({ text }: { text: string }) {
+  const [shown, setShown] = useState(false);
+  return (
+    <Line
+      className="text-[0.7em] italic"
+      wrap={(content) => (
+        <span
+          role="button"
+          aria-pressed={shown}
+          onClick={(e) => {
+            e.stopPropagation();
+            setShown((s) => !s);
+          }}
+          className={`inline-block cursor-pointer transition-[filter] duration-250 ${
+            shown ? "blur-none" : "blur-[0.12em] hover:blur-none"
+          }`}
+        >
+          {content}
+        </span>
+      )}
+    >
+      {text}
+    </Line>
+  );
+}
+
+/**
+ * A line of card text. Lines wrap only at spaces, so the text shrinks rather than split a word.
+ * `wrap` can wrap the line's content, e.g. to make it interactive.
+ */
 function Line({
   arabic,
   className = "",
+  wrap,
   children,
 }: {
   arabic?: boolean;
   className?: string;
+  wrap?: (content: ReactNode) => ReactNode;
   children: string;
 }) {
+  const content = children.split(/(\s+)/).map((part, i) =>
+    part.includes("-") ? (
+      <span key={i} className="whitespace-nowrap">
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
   return (
     <p
       lang={arabic ? "ar" : undefined}
       dir={arabic ? "rtl" : undefined}
       className={`my-[0.2em] ${arabic ? "text-[1.5em]" : ""} ${className}`}
     >
-      {children.split(/(\s+)/).map((part, i) =>
-        part.includes("-") ? (
-          <span key={i} className="whitespace-nowrap">
-            {part}
-          </span>
-        ) : (
-          part
-        ),
-      )}
+      {wrap ? wrap(content) : content}
     </p>
   );
 }

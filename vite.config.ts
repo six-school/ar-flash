@@ -15,7 +15,7 @@ export default defineConfig({
         short_name: "Flashcards",
         start_url: ".",
         display: "standalone",
-        background_color: "#ffffff",
+        background_color: "#000000",
         theme_color: "#000000",
         icons: [
           { src: "icon-192.png", sizes: "192x192", type: "image/png" },
