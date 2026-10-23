@@ -269,7 +269,7 @@ function Romanization({ text }: { text: string }) {
             setShown((s) => !s);
           }}
           className={`inline-block cursor-pointer transition-[filter] duration-250 ${
-            shown ? "blur-none" : "blur-[0.12em] hover:blur-none"
+            shown ? "blur-none" : "blur-[0.3em] hover:blur-none"
           }`}
         >
           {content}
