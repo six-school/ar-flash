@@ -11,8 +11,18 @@ describe("pausal", () => {
     expect(pausal("حُبّ")).toBe("حُبّْ");
   });
 
-  it("puts a sukun on a final ta marbuta", () => {
-    expect(pausal("وَرْدَة")).toBe("وَرْدَةْ");
+  it("drops a final ta marbuta, leaving a fatha on the letter before it", () => {
+    expect(pausal("وَرْدَة")).toBe("وَرْدَ");
+    expect(pausal("ثَمانِية")).toBe("ثَمانِيَ");
+    expect(pausal("مَعَ السَّلامة")).toBe("مَعَ السَّلامَ");
+  });
+
+  it("adds no fatha when a dropped ta marbuta follows an alif", () => {
+    expect(pausal("صَلاة")).toBe("صَلا");
+  });
+
+  it("keeps a ta marbuta that has a vowel", () => {
+    expect(pausal("ساعَةً")).toBe("ساعَةً");
   });
 
   it("leaves a final vowel, tanwin or sukun as it is", () => {
@@ -28,8 +38,8 @@ describe("pausal", () => {
   });
 
   it("pauses before punctuation as well as at the end", () => {
-    expect(pausal("جَيِّد، جَيِّدة")).toBe("جَيِّدْ، جَيِّدةْ");
-    expect(pausal("طَيِّب / طَيِّبة")).toBe("طَيِّبْ / طَيِّبةْ");
+    expect(pausal("جَيِّد، جَيِّدة")).toBe("جَيِّدْ، جَيِّدَ");
+    expect(pausal("طَيِّب / طَيِّبة")).toBe("طَيِّبْ / طَيِّبَ");
     expect(pausal("صَحيح؟")).toBe("صَحيحْ؟");
   });
 

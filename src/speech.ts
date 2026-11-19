@@ -7,18 +7,33 @@ const VOWEL = /[\u064B-\u0650\u0652\u0670]/;
 // Alif, alif madda, alif maqsura, waw and yeh usually end a word as long vowels, which take no
 // sukun.
 const LONG_VOWEL = "\u0627\u0622\u0649\u0648\u064A";
-// The last letter of a word where speech pauses (before punctuation or at the end), with its marks.
-const PAUSE = new RegExp(`([${LETTER}])([${MARK}]*)(?=\\s*(?:[^\\s${LETTER}${MARK}]|$))`, "g");
+const FATHA = "\u064E";
+const TA_MARBUTA = "\u0629";
+// Alif and alif madda: a ta marbuta after them needs no fatha.
+const ALIF = "\u0627\u0622";
+// Where speech pauses: before punctuation or at the end of the text.
+const AT_PAUSE = `(?=\\s*(?:[^\\s${LETTER}${MARK}]|$))`;
+// The last letter of a word at a pause, with its marks.
+const PAUSE = new RegExp(`([${LETTER}])([${MARK}]*)${AT_PAUSE}`, "g");
+// A bare ta marbuta at a pause, with the letter and marks before it.
+const PAUSED_TA_MARBUTA = new RegExp(`([${LETTER}])([${MARK}]*)${TA_MARBUTA}${AT_PAUSE}`, "g");
 
 /**
- * `text` as said with a pause: a sukun on the last letter before punctuation and at the end,
- * unless that letter already has a vowel or is a long-vowel letter. Speech engines otherwise fill
- * in a case ending, e.g. "akhḍaru" or "ṣaḥīḥan" for the single words "akhḍar" and "ṣaḥīḥ".
+ * `text` as said with a pause, before punctuation and at the end. Speech engines otherwise fill in
+ * a case ending, e.g. "akhḍaru" or "ṣaḥīḥan" for the single words "akhḍar" and "ṣaḥīḥ".
+ *
+ * - A bare ta marbuta is dropped, and the letter before it gets a fatha if it has no vowel, so
+ *   "as-salāma" ends in "-a". Engines say a ta marbuta with a sukun as a hard "t".
+ * - Any other last letter gets a sukun, unless it already has a vowel or is a long-vowel letter.
  */
 export function pausal(text: string): string {
-  return text.replace(PAUSE, (word, letter: string, marks: string) =>
-    LONG_VOWEL.includes(letter) || VOWEL.test(marks) ? word : letter + marks + SUKUN,
-  );
+  return text
+    .replace(PAUSED_TA_MARBUTA, (_, letter: string, marks: string) =>
+      ALIF.includes(letter) || VOWEL.test(marks) ? letter + marks : letter + marks + FATHA,
+    )
+    .replace(PAUSE, (word, letter: string, marks: string) =>
+      LONG_VOWEL.includes(letter) || VOWEL.test(marks) ? word : letter + marks + SUKUN,
+    );
 }
 
 /** Speak `text` in Arabic, in pausal form, cutting off anything still being spoken. */
