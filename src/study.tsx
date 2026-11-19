@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { animate, motion, useMotionValue, useTransform, type PanInfo } from "motion/react";
 import { BackIcon, IconButton, SpeakerIcon, TopBar, UndoIcon } from "./screens";
+import { speak } from "./speech";
 
 type Flashcard = { id: number; arabic: string; plain: string; english: string };
 type Outcome = "remembered" | "forgotten";
@@ -349,10 +350,7 @@ function SpeakButton({ text }: { text: string }) {
       onClick={(e) => {
         e.stopPropagation();
         e.currentTarget.blur();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = "ar";
-        speechSynthesis.cancel();
-        speechSynthesis.speak(utterance);
+        speak(text);
       }}
       className={`${SPEAKER_BOX} cursor-pointer rounded-full opacity-60 hover:bg-neutral-500/15 hover:opacity-100`}
     >

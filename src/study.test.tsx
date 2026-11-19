@@ -58,12 +58,13 @@ describe("Study card", () => {
       .toBeVisible();
   });
 
-  it("speaks the vowelled form in Arabic from the speaker button, without flipping or answering", async () => {
+  it("speaks the vowelled form in Arabic, in pausal form, from the speaker button, without flipping or answering", async () => {
     const speak = vi.spyOn(speechSynthesis, "speak").mockImplementation(() => {});
     const onAnswer = vi.fn(() => () => {});
     const screen = await renderStudy(onAnswer);
     await screen.getByRole("button", { name: "Show answer" }).click();
-    // The word shows the plain form, but the speaker always speaks the vowelled one.
+    // The word shows the plain form, but the speaker always speaks the vowelled one, with a
+    // sukun on the final consonant so the speech engine doesn't add a case ending.
     await expect
       .element(screen.getByRole("button", { name: card.plain, exact: true }))
       .toBeVisible();
@@ -71,7 +72,7 @@ describe("Study card", () => {
     await screen.getByRole("button", { name: "Speak" }).click();
     expect(speak).toHaveBeenCalledOnce();
     const [utterance] = speak.mock.calls[0];
-    expect(utterance.text).toBe(card.arabic);
+    expect(utterance.text).toBe("ثابِتْ");
     expect(utterance.lang).toBe("ar");
 
     await expect.element(screen.getByRole("button", { name: /Remembered/ })).toBeVisible();
