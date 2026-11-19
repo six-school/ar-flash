@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
+import { CardDetails } from "./card";
 import { useCards } from "./cards";
 import { exportProgress, useProgress } from "./progress";
 import { dueAt, listOrder, sessionOrder } from "./schedule";
@@ -8,9 +9,13 @@ import { Study } from "./study";
 
 type Card = { id: number; arabic: string; plain: string; english: string };
 
-type Screen = { name: "home" } | { name: "stack" } | { name: "study"; cards: Card[] };
+type Screen =
+  | { name: "home" }
+  | { name: "stack" }
+  | { name: "study"; cards: Card[] }
+  | { name: "card"; card: Card };
 
-const depth = { home: 0, stack: 1, study: 2 } as const;
+const depth = { home: 0, stack: 1, study: 2, card: 2 } as const;
 
 // Deeper screens slide in from the right; going back slides them out to the right.
 const views = {
@@ -24,8 +29,11 @@ export default function App() {
   const { progress, answer } = useProgress();
   const [screen, setScreen] = useState<Screen>({ name: "home" });
   const [dir, setDir] = useState(1);
+  // The card list's scroll position, kept while a card's details are open.
+  const listScroll = useRef(0);
 
   const go = (next: Screen) => {
+    if (next.name === "stack" && screen.name !== "card") listScroll.current = 0;
     setDir(Math.sign(depth[next.name] - depth[screen.name]) || 1);
     setScreen(next);
   };
@@ -58,10 +66,27 @@ export default function App() {
       <StackScreen
         title={title}
         rows={rows}
+        initialScroll={listScroll.current}
+        onScroll={(top) => {
+          listScroll.current = top;
+        }}
         onBack={() => go({ name: "home" })}
         onGo={() =>
           go({ name: "study", cards: sessionOrder(all, progress, Date.now(), Math.random) })
         }
+        onOpenCard={(id) => {
+          const card = all.find((c) => c.id === id);
+          if (card) go({ name: "card", card });
+        }}
+      />
+    );
+  } else if (screen.name === "card") {
+    const r = progress[screen.card.id];
+    view = (
+      <CardDetails
+        card={screen.card}
+        review={r && { level: r.level, due: dueAt(r) }}
+        onBack={() => go({ name: "stack" })}
       />
     );
   } else {

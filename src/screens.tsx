@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export function TopBar({
   left,
@@ -112,8 +112,18 @@ export function stackStatus(dueTimes: number[], unstudied: number, now: number):
   return parts.join(" · ") || "No cards";
 }
 
+/**
+ * A card's status on its details screen: "Not studied yet", "Level 3 · due now" or
+ * "Level 3 · due in 5 hours". `review` is undefined for a card not yet studied.
+ */
+export function cardStatus(review: { level: number; due: number } | undefined, now: number) {
+  if (!review) return "Not studied yet";
+  const when = review.due <= now ? "due now" : `due ${inTime(review.due, now)}`;
+  return `Level ${review.level} · ${when}`;
+}
+
 /** The current time, updated every 30 seconds and whenever the page comes back into view. */
-function useNow() {
+export function useNow() {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const tick = () => setNow(Date.now());
@@ -191,18 +201,34 @@ function Level({ level }: { level: number | null }) {
   );
 }
 
-/** `rows` are in list order; `level` is null for a card not yet studied. */
+/**
+ * `rows` are in list order; `level` is null for a card not yet studied. The card list opens
+ * scrolled to `initialScroll` and reports its scroll position through `onScroll`, so it can come
+ * back to the same place after a card's details.
+ */
 export function StackScreen({
   title,
   rows,
+  initialScroll,
+  onScroll,
   onBack,
   onGo,
+  onOpenCard,
 }: {
   title: string;
   rows: { id: number; plain: string; level: number | null }[];
+  initialScroll: number;
+  onScroll: (top: number) => void;
   onBack: () => void;
   onGo: () => void;
+  onOpenCard: (id: number) => void;
 }) {
+  const list = useRef<HTMLUListElement>(null);
+  // Only on mount: after that, the scroll position is the user's.
+  useLayoutEffect(() => {
+    list.current!.scrollTop = initialScroll;
+  }, []);
+
   return (
     <div className="flex h-full flex-col">
       <TopBar
@@ -222,16 +248,22 @@ export function StackScreen({
         </button>
         <p className="mt-4 text-center text-sm opacity-60">{rows.length} cards</p>
       </div>
-      <ul className="flex-1 overflow-y-auto border-t border-neutral-500/25 pb-[env(safe-area-inset-bottom)]">
+      <ul
+        ref={list}
+        onScroll={(e) => onScroll(e.currentTarget.scrollTop)}
+        className="flex-1 overflow-y-auto border-t border-neutral-500/25 pb-[env(safe-area-inset-bottom)]"
+      >
         {rows.map((r) => (
-          <li
-            key={r.id}
-            className="flex items-center gap-4 border-b border-neutral-500/15 px-5 py-2"
-          >
-            <Level level={r.level} />
-            <span lang="ar" dir="rtl" className="min-w-0 text-2xl break-words">
-              {r.plain}
-            </span>
+          <li key={r.id} className="border-b border-neutral-500/15">
+            <button
+              onClick={() => onOpenCard(r.id)}
+              className="flex w-full cursor-pointer items-center gap-4 px-5 py-2 text-left hover:bg-neutral-500/10 active:bg-neutral-500/10"
+            >
+              <Level level={r.level} />
+              <span lang="ar" dir="rtl" className="min-w-0 text-2xl break-words">
+                {r.plain}
+              </span>
+            </button>
           </li>
         ))}
       </ul>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { stackStatus } from "./screens";
+import { cardStatus, stackStatus } from "./screens";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -41,5 +41,20 @@ describe("stackStatus", () => {
 
   it("says there are no cards for an empty stack", () => {
     expect(stackStatus([], 0, now)).toBe("No cards");
+  });
+});
+
+describe("cardStatus", () => {
+  it("says a new card isn't studied yet", () => {
+    expect(cardStatus(undefined, now)).toBe("Not studied yet");
+  });
+
+  it("gives the level and says a due or overdue card is due now", () => {
+    expect(cardStatus({ level: 3, due: now }, now)).toBe("Level 3 · due now");
+    expect(cardStatus({ level: -1, due: now - DAY }, now)).toBe("Level -1 · due now");
+  });
+
+  it("gives the level and how soon a card not yet due is due", () => {
+    expect(cardStatus({ level: 4, due: now + 5 * HOUR }, now)).toBe("Level 4 · due in 5 hours");
   });
 });

@@ -1,7 +1,7 @@
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { animate, motion, useMotionValue, useTransform, type PanInfo } from "motion/react";
-import { BackIcon, IconButton, SpeakerIcon, TopBar, UndoIcon } from "./screens";
-import { speak } from "./speech";
+import { Answer, FitText, Question } from "./card";
+import { BackIcon, IconButton, TopBar, UndoIcon } from "./screens";
 
 type Flashcard = { id: number; arabic: string; plain: string; english: string };
 type Outcome = "remembered" | "forgotten";
@@ -154,14 +154,7 @@ function Card({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const word = (
-    <ArabicWord
-      plain={card.plain}
-      arabic={card.arabic}
-      vowels={vowels}
-      onToggle={() => setVowels((v) => !v)}
-    />
-  );
+  const toggleVowels = () => setVowels((v) => !v);
 
   return (
     <motion.div
@@ -216,15 +209,10 @@ function Card({
             transition={{ duration: 0.45, ease: [0.3, 0, 0.2, 1] }}
           >
             <Face shown={!revealed}>
-              <ArabicLine>{word}</ArabicLine>
+              <Question card={card} vowels={vowels} onToggleVowels={toggleVowels} />
             </Face>
             <Face back shown={revealed}>
-              <ArabicLine>
-                {canSpeak && <SpeakerSpace />}
-                {word}
-                {canSpeak && <SpeakButton text={card.arabic} />}
-              </ArabicLine>
-              <Line>{card.english}</Line>
+              <Answer card={card} vowels={vowels} onToggleVowels={toggleVowels} />
             </Face>
           </motion.div>
         </motion.div>
@@ -272,150 +260,6 @@ function Face({ back, shown, children }: { back?: boolean; shown: boolean; child
       }}
     >
       <FitText>{children}</FitText>
-    </div>
-  );
-}
-
-/**
- * The Arabic word, shown plain or vowelled; tapping it toggles the vowels without flipping the
- * card. An invisible copy of the vowelled form sits in the same grid cell, so the word takes the
- * same space either way and toggling doesn't change the fitted font size.
- */
-function ArabicWord({
-  plain,
-  arabic,
-  vowels,
-  onToggle,
-}: {
-  plain: string;
-  arabic: string;
-  vowels: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      lang="ar"
-      dir="rtl"
-      title={vowels ? "Hide vowels" : "Show vowels"}
-      onClick={(e) => {
-        e.stopPropagation();
-        e.currentTarget.blur();
-        onToggle();
-      }}
-      className="inline-grid cursor-pointer"
-    >
-      <span aria-hidden className="invisible [grid-area:1/1]">
-        {arabic}
-      </span>
-      <span className="[grid-area:1/1]">{vowels ? arabic : plain}</span>
-    </button>
-  );
-}
-
-// Without speech synthesis, the speaker button and the space that balances it are left out.
-const canSpeak = typeof speechSynthesis !== "undefined";
-// The speaker button's box and icon. A blank box of the same size sits on the word's other side,
-// so the word stays centred on the card.
-const SPEAKER_BOX = "shrink-0 p-2";
-const SPEAKER_ICON = "size-[clamp(1.5rem,0.5em,2.5rem)]";
-
-function SpeakerSpace() {
-  return (
-    <span aria-hidden className={`invisible ${SPEAKER_BOX}`}>
-      <SpeakerIcon className={SPEAKER_ICON} />
-    </span>
-  );
-}
-
-/** Speaks `text` in Arabic. */
-function SpeakButton({ text }: { text: string }) {
-  const ref = useRef<HTMLButtonElement>(null);
-
-  // The card starts a swipe from a native pointerdown on itself, which a React handler here would
-  // see too late to stop; stopping the native event keeps a press on this button from swiping.
-  useEffect(() => {
-    const el = ref.current;
-    const stop = (e: PointerEvent) => e.stopPropagation();
-    el?.addEventListener("pointerdown", stop);
-    return () => el?.removeEventListener("pointerdown", stop);
-  }, []);
-
-  return (
-    <button
-      ref={ref}
-      type="button"
-      aria-label="Speak"
-      title="Speak"
-      onClick={(e) => {
-        e.stopPropagation();
-        e.currentTarget.blur();
-        speak(text);
-      }}
-      className={`${SPEAKER_BOX} cursor-pointer rounded-full opacity-60 hover:bg-neutral-500/15 hover:opacity-100`}
-    >
-      <SpeakerIcon className={SPEAKER_ICON} />
-    </button>
-  );
-}
-
-/** The Arabic line: larger than the English, centred, with anything after the word to its right. */
-function ArabicLine({ children }: { children: ReactNode }) {
-  return (
-    <p className="my-[0.2em] flex items-center justify-center gap-[0.15em] text-[1.5em]">
-      {children}
-    </p>
-  );
-}
-
-/**
- * A line of English card text. It wraps only at spaces, so the text shrinks rather than split a
- * word.
- */
-function Line({ children }: { children: string }) {
-  const content = children.split(/(\s+)/).map((part, i) =>
-    part.includes("-") ? (
-      <span key={i} className="whitespace-nowrap">
-        {part}
-      </span>
-    ) : (
-      part
-    ),
-  );
-  return <p className="my-[0.2em]">{content}</p>;
-}
-
-/** Sets the largest font size at which the content still fits its box, and refits on resize. */
-function FitText({ children }: { children: ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const el = ref.current!;
-    const fit = () => {
-      let lo = 8,
-        hi = 400;
-      while (hi - lo > 1) {
-        const mid = (lo + hi) >> 1;
-        el.style.fontSize = `${mid}px`;
-        // Check each line too: right-to-left text overflows to the left, which the box's own scrollWidth misses.
-        const lines = [...el.children];
-        const fits =
-          el.scrollHeight <= el.clientHeight && lines.every((l) => l.scrollWidth <= l.clientWidth);
-        if (fits) lo = mid;
-        else hi = mid;
-      }
-      el.style.fontSize = `${lo}px`;
-    };
-    fit();
-    const ro = new ResizeObserver(fit);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [children]);
-  return (
-    <div
-      ref={ref}
-      className="absolute inset-0 flex flex-col justify-center overflow-hidden p-6 text-center leading-tight"
-    >
-      {children}
     </div>
   );
 }
