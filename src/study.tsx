@@ -1,42 +1,42 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { animate, motion, useMotionValue, useTransform, type PanInfo } from "motion/react";
-import { type Entry, type Outcome, type StackId } from "./store";
-import { BackIcon, IconButton, TopBar, UndoIcon } from "./screens";
+import { BackIcon, IconButton, SpeakerIcon, TopBar, UndoIcon } from "./screens";
 
-type RecordFn = (stack: StackId, id: number, outcome: Outcome, delta: 1 | -1) => void;
+type Flashcard = { id: number; arabic: string; plain: string; english: string };
+type Outcome = "remembered" | "forgotten";
 
 export function Study({
-  stack,
   cards,
-  record,
+  onAnswer,
   onExit,
 }: {
-  stack: StackId;
-  cards: Entry[];
-  record: RecordFn;
+  cards: Flashcard[];
+  /** Records an answer and returns a function that undoes it. */
+  onAnswer: (id: number, remembered: boolean) => () => void;
   onExit: () => void;
 }) {
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
-  const [history, setHistory] = useState<Outcome[]>([]); // history[i] is the outcome for cards[i]
+  // history[i] is the answer to cards[i], with the function that undoes it.
+  const [history, setHistory] = useState<{ outcome: Outcome; revert: () => void }[]>([]);
 
   const mark = (outcome: Outcome) => {
-    record(stack, cards[index].id, outcome, 1);
-    setHistory((h) => [...h, outcome]);
+    const revert = onAnswer(cards[index].id, outcome === "remembered");
+    setHistory((h) => [...h, { outcome, revert }]);
     setIndex((i) => i + 1);
     setRevealed(false);
   };
 
   const undo = () => {
     if (index === 0) return;
-    record(stack, cards[index - 1].id, history[history.length - 1], -1);
+    history[history.length - 1].revert();
     setHistory((h) => h.slice(0, -1));
     setIndex((i) => i - 1);
     setRevealed(false);
   };
 
   const done = index >= cards.length;
-  const count = (o: Outcome) => history.filter((h) => h === o).length;
+  const count = (o: Outcome) => history.filter((h) => h.outcome === o).length;
 
   return (
     <div className="flex h-full flex-col">
@@ -73,8 +73,7 @@ export function Study({
       ) : (
         <Card
           key={index}
-          stack={stack}
-          entry={cards[index]}
+          card={cards[index]}
           revealed={revealed}
           onFlip={() => setRevealed(true)}
           onMark={mark}
@@ -89,20 +88,22 @@ const GREEN = "rgb(22, 163, 74)";
 const SWIPE_DISTANCE = 100;
 const SWIPE_VELOCITY = 500;
 
-/** One card. Keyed by position, so each new card mounts fresh, unflipped and centred. */
+/**
+ * One card. Keyed by position, so each new card mounts fresh: unflipped, centred and unvowelled.
+ * The vowel toggle belongs to the card, so vowels shown on the front stay shown after the flip.
+ */
 function Card({
-  stack,
-  entry,
+  card,
   revealed,
   onFlip,
   onMark,
 }: {
-  stack: StackId;
-  entry: Entry;
+  card: Flashcard;
   revealed: boolean;
   onFlip: () => void;
   onMark: (o: Outcome) => void;
 }) {
+  const [vowels, setVowels] = useState(false);
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-300, 300], [-10, 10]);
   const underlay = useTransform(
@@ -113,6 +114,8 @@ function Card({
   const forgotOpacity = useTransform(x, [-SWIPE_DISTANCE, -20], [1, 0]);
   const rememberedOpacity = useTransform(x, [20, SWIPE_DISTANCE], [0, 1]);
   const leaving = useRef(false);
+  // Set when a press turns into a drag, so the click that ends the drag isn't taken as a tap.
+  const dragged = useRef(false);
 
   // Fly the card off in the swipe direction, then record the result.
   const commit = (outcome: Outcome) => {
@@ -141,24 +144,23 @@ function Card({
       if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       if (!["ArrowLeft", "ArrowRight", " "].includes(e.key)) return;
       e.preventDefault();
-      const card = latest.current;
-      if (!card.revealed) card.onFlip();
-      else if (e.key === "ArrowLeft") card.commit("forgotten");
-      else if (e.key === "ArrowRight") card.commit("remembered");
+      const current = latest.current;
+      if (!current.revealed) current.onFlip();
+      else if (e.key === "ArrowLeft") current.commit("forgotten");
+      else if (e.key === "ArrowRight") current.commit("remembered");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const arabic = (
-    <Line key="ar" arabic>
-      {entry.arabic}
-    </Line>
+  const word = (
+    <ArabicWord
+      plain={card.plain}
+      arabic={card.arabic}
+      vowels={vowels}
+      onToggle={() => setVowels((v) => !v)}
+    />
   );
-  const rom = entry.romanization ? <Romanization key="rom" text={entry.romanization} /> : null;
-  const english = <Line key="en">{entry.english}</Line>;
-  const question = stack === "en-ar" ? [english] : [arabic];
-  const answer = stack === "en-ar" ? [english, arabic, rom] : [arabic, rom, english];
 
   return (
     <motion.div
@@ -186,11 +188,21 @@ function Card({
           </motion.span>
         </motion.div>
         <motion.div
+          data-testid="card"
           className="relative h-full cursor-pointer select-none"
           style={{ x, rotate }}
           drag={revealed ? "x" : false}
           dragMomentum={false}
+          onPointerDownCapture={() => {
+            dragged.current = false;
+          }}
+          onDragStart={() => {
+            dragged.current = true;
+          }}
           onDragEnd={onDragEnd}
+          onClickCapture={(e) => {
+            if (dragged.current) e.stopPropagation();
+          }}
           onClick={() => {
             if (!revealed) onFlip();
           }}
@@ -202,8 +214,16 @@ function Card({
             animate={{ rotateY: revealed ? 180 : 0 }}
             transition={{ duration: 0.45, ease: [0.3, 0, 0.2, 1] }}
           >
-            <Face>{question}</Face>
-            <Face back>{answer}</Face>
+            <Face shown={!revealed}>
+              <ArabicLine>{word}</ArabicLine>
+            </Face>
+            <Face back shown={revealed}>
+              <ArabicLine>
+                {word}
+                <SpeakButton text={card.arabic} />
+              </ArabicLine>
+              <Line>{card.english}</Line>
+            </Face>
           </motion.div>
         </motion.div>
       </div>
@@ -236,9 +256,12 @@ function Card({
   );
 }
 
-function Face({ back, children }: { back?: boolean; children: ReactNode }) {
+/** The face that isn't showing is inert and hidden, so its buttons can't be reached. */
+function Face({ back, shown, children }: { back?: boolean; shown: boolean; children: ReactNode }) {
   return (
     <div
+      aria-hidden={!shown}
+      inert={!shown}
       className="absolute inset-0 overflow-hidden rounded-3xl border border-neutral-500/30 bg-white dark:bg-black"
       style={{
         backfaceVisibility: "hidden",
@@ -252,50 +275,88 @@ function Face({ back, children }: { back?: boolean; children: ReactNode }) {
 }
 
 /**
- * The transliteration starts blurred. A tap or click toggles it; on devices with a mouse,
- * hovering unblurs it until the pointer leaves (Tailwind's `hover:` only applies where hover exists).
+ * The Arabic word, shown plain or vowelled; tapping it toggles the vowels without flipping the
+ * card. An invisible copy of the vowelled form sits in the same grid cell, so the word takes the
+ * same space either way and toggling doesn't change the fitted font size.
  */
-function Romanization({ text }: { text: string }) {
-  const [shown, setShown] = useState(false);
+function ArabicWord({
+  plain,
+  arabic,
+  vowels,
+  onToggle,
+}: {
+  plain: string;
+  arabic: string;
+  vowels: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <Line
-      className="text-[0.7em] italic"
-      wrap={(content) => (
-        <span
-          role="button"
-          aria-pressed={shown}
-          onClick={(e) => {
-            e.stopPropagation();
-            setShown((s) => !s);
-          }}
-          className={`inline-block cursor-pointer transition-[filter] duration-250 ${
-            shown ? "blur-none" : "blur-[0.3em] hover:blur-none"
-          }`}
-        >
-          {content}
-        </span>
-      )}
+    <button
+      type="button"
+      lang="ar"
+      dir="rtl"
+      title={vowels ? "Hide vowels" : "Show vowels"}
+      onClick={(e) => {
+        e.stopPropagation();
+        e.currentTarget.blur();
+        onToggle();
+      }}
+      className="inline-grid cursor-pointer"
     >
-      {text}
-    </Line>
+      <span aria-hidden className="invisible [grid-area:1/1]">
+        {arabic}
+      </span>
+      <span className="[grid-area:1/1]">{vowels ? arabic : plain}</span>
+    </button>
   );
 }
 
-/**
- * A line of card text. Lines wrap only at spaces, so the text shrinks rather than split a word.
- * `wrap` can wrap the line's content, e.g. to make it interactive.
- */
-function Line({
-  arabic,
-  className = "",
-  wrap,
-  children,
-}: {
-  arabic?: boolean;
-  className?: string;
-  wrap?: (content: ReactNode) => ReactNode;
-  children: string;
-}) {
+/** Speaks `text` in Arabic. Hidden where the browser has no speech synthesis. */
+function SpeakButton({ text }: { text: string }) {
+  const ref = useRef<HTMLButtonElement>(null);
+
+  // The card starts a swipe from a native pointerdown on itself, which a React handler here would
+  // see too late to stop; stopping the native event keeps a press on this button from swiping.
+  useEffect(() => {
+    const el = ref.current;
+    const stop = (e: PointerEvent) => e.stopPropagation();
+    el?.addEventListener("pointerdown", stop);
+    return () => el?.removeEventListener("pointerdown", stop);
+  }, []);
+
+  if (!("speechSynthesis" in window)) return null;
+  return (
+    <button
+      ref={ref}
+      type="button"
+      aria-label="Speak"
+      title="Speak"
+      onClick={(e) => {
+        e.stopPropagation();
+        e.currentTarget.blur();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = "ar";
+        speechSynthesis.cancel();
+        speechSynthesis.speak(utterance);
+      }}
+      className="shrink-0 cursor-pointer rounded-full p-2 opacity-60 hover:bg-neutral-500/15 hover:opacity-100"
+    >
+      <SpeakerIcon className="size-[clamp(1.5rem,0.5em,2.5rem)]" />
+    </button>
+  );
+}
+
+/** The Arabic line: larger than the English, centred, with anything after the word to its right. */
+function ArabicLine({ children }: { children: ReactNode }) {
+  return (
+    <p className="my-[0.2em] flex items-center justify-center gap-[0.15em] text-[1.5em]">
+      {children}
+    </p>
+  );
+}
+
+/** A line of English card text. It wraps only at spaces, so the text shrinks rather than split a word. */
+function Line({ children }: { children: string }) {
   const content = children.split(/(\s+)/).map((part, i) =>
     part.includes("-") ? (
       <span key={i} className="whitespace-nowrap">
@@ -305,15 +366,7 @@ function Line({
       part
     ),
   );
-  return (
-    <p
-      lang={arabic ? "ar" : undefined}
-      dir={arabic ? "rtl" : undefined}
-      className={`my-[0.2em] ${arabic ? "text-[1.5em]" : ""} ${className}`}
-    >
-      {wrap ? wrap(content) : content}
-    </p>
-  );
+  return <p className="my-[0.2em]">{content}</p>;
 }
 
 /** Sets the largest font size at which the content still fits its box, and refits on resize. */

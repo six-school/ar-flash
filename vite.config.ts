@@ -1,7 +1,8 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { playwright } from "@vitest/browser-playwright";
 
 export default defineConfig({
   base: "./",
@@ -23,17 +24,40 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // The app shell is precached; vocabulary.json is fetched network-first
+        // The app shell is precached; the card file ar-en.json is fetched network-first
         // so edits on the server show up, with the cached copy used offline.
         globPatterns: ["**/*.{js,css,html,png}"],
         runtimeCaching: [
           {
-            urlPattern: /vocabulary\.json$/,
+            urlPattern: /ar-en\.json$/,
             handler: "NetworkFirst",
-            options: { cacheName: "vocabulary" },
+            options: { cacheName: "cards" },
           },
         ],
       },
     }),
   ],
+  test: {
+    projects: [
+      // Logic tests run in Node.
+      {
+        extends: true,
+        test: { name: "unit", include: ["src/**/*.test.ts"], environment: "node" },
+      },
+      // Component tests run in headless Chromium.
+      {
+        extends: true,
+        test: {
+          name: "browser",
+          include: ["src/**/*.test.tsx"],
+          browser: {
+            enabled: true,
+            provider: playwright(),
+            headless: true,
+            instances: [{ browser: "chromium" }],
+          },
+        },
+      },
+    ],
+  },
 });

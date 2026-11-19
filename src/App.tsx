@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
-import { type Entry, type StackId, sessionOrder, useProgress, useVocabulary } from "./store";
+import { useCards } from "./cards";
+import { exportProgress, useProgress } from "./progress";
+import { listOrder, sessionOrder } from "./schedule";
 import { Splash, StackScreen } from "./screens";
 import { Study } from "./study";
 
-type Screen =
-  | { name: "home" }
-  | { name: "stack"; stack: StackId }
-  | { name: "study"; stack: StackId; cards: Entry[] };
+type Card = { id: number; arabic: string; plain: string; english: string };
+
+type Screen = { name: "home" } | { name: "stack" } | { name: "study"; cards: Card[] };
 
 const depth = { home: 0, stack: 1, study: 2 } as const;
 
@@ -19,8 +20,8 @@ const views = {
 };
 
 export default function App() {
-  const { entries, error } = useVocabulary();
-  const { progress, record } = useProgress();
+  const cards = useCards();
+  const { progress, answer } = useProgress();
   const [screen, setScreen] = useState<Screen>({ name: "home" });
   const [dir, setDir] = useState(1);
 
@@ -29,39 +30,39 @@ export default function App() {
     setScreen(next);
   };
 
-  if (error) return <p className="p-6">Couldn’t load vocabulary.json.</p>;
-  if (!entries) return null;
+  if (!cards) return null;
+  if ("error" in cards) return <p className="p-6 whitespace-pre-wrap">{cards.error}</p>;
+  const { title, cards: all } = cards.file;
 
   let view;
   if (screen.name === "home") {
     view = (
       <Splash
-        entries={entries}
-        progress={progress}
-        onOpen={(stack) => go({ name: "stack", stack })}
+        title={title}
+        studied={all.filter((c) => progress[c.id]).length}
+        total={all.length}
+        onOpen={() => go({ name: "stack" })}
+        onExport={() => exportProgress(progress)}
       />
     );
   } else if (screen.name === "stack") {
-    const { stack } = screen;
+    const rows = listOrder(all, progress, Date.now()).map((c) => ({
+      id: c.id,
+      plain: c.plain,
+      level: progress[c.id]?.level ?? null,
+    }));
     view = (
       <StackScreen
-        stack={stack}
-        entries={entries}
-        progress={progress}
+        title={title}
+        rows={rows}
         onBack={() => go({ name: "home" })}
-        onGo={() => go({ name: "study", stack, cards: sessionOrder(entries, progress, stack) })}
+        onGo={() =>
+          go({ name: "study", cards: sessionOrder(all, progress, Date.now(), Math.random) })
+        }
       />
     );
   } else {
-    const { stack, cards } = screen;
-    view = (
-      <Study
-        stack={stack}
-        cards={cards}
-        record={record}
-        onExit={() => go({ name: "stack", stack })}
-      />
-    );
+    view = <Study cards={screen.cards} onAnswer={answer} onExit={() => go({ name: "stack" })} />;
   }
 
   return (
