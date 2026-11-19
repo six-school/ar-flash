@@ -52,12 +52,13 @@ export function review(prev: Review | undefined, remembered: boolean, now: numbe
   };
 }
 
-/** Cards come up by this key: a studied card's due time, or `now` for a new card. */
+/** Cards sort by this key: a studied card's due time, or `now` for a new card. */
 const sortKey = (r: Review | undefined, now: number) => (r ? dueAt(r) : now);
 
 /**
- * The order of a session starting at `now`: overdue cards (most overdue first), then new cards,
- * then cards not yet due (soonest first). Cards with equal keys are shuffled with `random`.
+ * The order of a session starting at `now`: cards that are due, then new cards, both shuffled
+ * with `random`, then cards not yet due (soonest first, ties shuffled). Due cards aren't sorted by
+ * due time, because cards answered together would then come back in the order they were answered.
  */
 export function sessionOrder<T extends { id: number }>(
   cards: T[],
@@ -70,11 +71,25 @@ export function sessionOrder<T extends { id: number }>(
     const j = Math.floor(random() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
   }
-  // The sort is stable, so the shuffle survives among equal keys.
-  return a.toSorted((x, y) => sortKey(reviews[x.id], now) - sortKey(reviews[y.id], now));
+  const due: T[] = [];
+  const fresh: T[] = [];
+  const later: T[] = [];
+  for (const c of a) {
+    const r = reviews[c.id];
+    if (!r) fresh.push(c);
+    else if (dueAt(r) <= now) due.push(c);
+    else later.push(c);
+  }
+  // The sort is stable, so the shuffle survives among equal due times.
+  later.sort((x, y) => sortKey(reviews[x.id], now) - sortKey(reviews[y.id], now));
+  return [...due, ...fresh, ...later];
 }
 
-/** The order of the stack's card list: the session order, with ties broken by id. */
+/**
+ * The order of the stack's card list: overdue cards (most overdue first), then new cards, then
+ * cards not yet due (soonest first), with ties broken by id. Unlike a session's order, it doesn't
+ * change between visits.
+ */
 export function listOrder<T extends { id: number }>(
   cards: T[],
   reviews: Reviews,
