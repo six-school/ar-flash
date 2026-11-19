@@ -2,7 +2,7 @@ import { useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { useCards } from "./cards";
 import { exportProgress, useProgress } from "./progress";
-import { listOrder, sessionOrder } from "./schedule";
+import { dueAt, listOrder, sessionOrder } from "./schedule";
 import { Splash, StackScreen } from "./screens";
 import { Study } from "./study";
 
@@ -39,8 +39,11 @@ export default function App() {
     view = (
       <Splash
         title={title}
-        studied={all.filter((c) => progress[c.id]).length}
-        total={all.length}
+        dueTimes={all.flatMap((c) => {
+          const r = progress[c.id];
+          return r ? [dueAt(r)] : [];
+        })}
+        unstudied={all.filter((c) => !progress[c.id]).length}
         onOpen={() => go({ name: "stack" })}
         onExport={() => exportProgress(progress)}
       />

@@ -219,8 +219,9 @@ function Card({
             </Face>
             <Face back shown={revealed}>
               <ArabicLine>
+                {canSpeak && <SpeakerSpace />}
                 {word}
-                <SpeakButton text={card.arabic} />
+                {canSpeak && <SpeakButton text={card.arabic} />}
               </ArabicLine>
               <Line>{card.english}</Line>
             </Face>
@@ -311,7 +312,22 @@ function ArabicWord({
   );
 }
 
-/** Speaks `text` in Arabic. Hidden where the browser has no speech synthesis. */
+// Without speech synthesis, the speaker button and the space that balances it are left out.
+const canSpeak = typeof speechSynthesis !== "undefined";
+// The speaker button's box and icon. A blank box of the same size sits on the word's other side,
+// so the word stays centred on the card.
+const SPEAKER_BOX = "shrink-0 p-2";
+const SPEAKER_ICON = "size-[clamp(1.5rem,0.5em,2.5rem)]";
+
+function SpeakerSpace() {
+  return (
+    <span aria-hidden className={`invisible ${SPEAKER_BOX}`}>
+      <SpeakerIcon className={SPEAKER_ICON} />
+    </span>
+  );
+}
+
+/** Speaks `text` in Arabic. */
 function SpeakButton({ text }: { text: string }) {
   const ref = useRef<HTMLButtonElement>(null);
 
@@ -324,7 +340,6 @@ function SpeakButton({ text }: { text: string }) {
     return () => el?.removeEventListener("pointerdown", stop);
   }, []);
 
-  if (!("speechSynthesis" in window)) return null;
   return (
     <button
       ref={ref}
@@ -339,9 +354,9 @@ function SpeakButton({ text }: { text: string }) {
         speechSynthesis.cancel();
         speechSynthesis.speak(utterance);
       }}
-      className="shrink-0 cursor-pointer rounded-full p-2 opacity-60 hover:bg-neutral-500/15 hover:opacity-100"
+      className={`${SPEAKER_BOX} cursor-pointer rounded-full opacity-60 hover:bg-neutral-500/15 hover:opacity-100`}
     >
-      <SpeakerIcon className="size-[clamp(1.5rem,0.5em,2.5rem)]" />
+      <SpeakerIcon className={SPEAKER_ICON} />
     </button>
   );
 }
@@ -355,7 +370,10 @@ function ArabicLine({ children }: { children: ReactNode }) {
   );
 }
 
-/** A line of English card text. It wraps only at spaces, so the text shrinks rather than split a word. */
+/**
+ * A line of English card text. It wraps only at spaces, so the text shrinks rather than split a
+ * word.
+ */
 function Line({ children }: { children: string }) {
   const content = children.split(/(\s+)/).map((part, i) =>
     part.includes("-") ? (

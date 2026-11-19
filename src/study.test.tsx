@@ -13,6 +13,11 @@ function renderStudy(onAnswer = vi.fn(() => () => {})) {
   );
 }
 
+function centre(el: Element) {
+  const r = el.getBoundingClientRect();
+  return r.left + r.width / 2;
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -72,5 +77,15 @@ describe("Study card", () => {
     await expect.element(screen.getByRole("button", { name: /Remembered/ })).toBeVisible();
     await expect.element(screen.getByText(card.english)).toBeVisible();
     expect(onAnswer).not.toHaveBeenCalled();
+  });
+
+  it("keeps the Arabic word centred on the back, beside the speaker button", async () => {
+    const screen = await renderStudy();
+    await screen.getByRole("button", { name: "Show answer" }).click();
+    await expect.element(screen.getByRole("button", { name: "Speak" })).toBeVisible();
+    const word = screen.getByRole("button", { name: card.plain, exact: true });
+    const offset = () => centre(word.element()) - centre(screen.getByTestId("card").element());
+    // Polled, because the card is still turning over just after the flip.
+    await expect.poll(() => Math.abs(offset())).toBeLessThan(1);
   });
 });

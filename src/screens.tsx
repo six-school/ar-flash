@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 export function TopBar({
   left,
@@ -78,19 +78,73 @@ const ChevronIcon = () => (
   </svg>
 );
 
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+const relative = new Intl.RelativeTimeFormat("en", { numeric: "always" });
+
+/**
+ * How far ahead `at` is from `now`, rounded to the largest fitting unit: "in 1 minute",
+ * "in 3 hours", "in 2 days", "in 6 weeks".
+ */
+function inTime(at: number, now: number): string {
+  const ms = at - now;
+  const minutes = Math.round(ms / MINUTE);
+  if (minutes < 60) return relative.format(Math.max(1, minutes), "minute");
+  const hours = Math.round(ms / HOUR);
+  if (hours < 24) return relative.format(hours, "hour");
+  const days = Math.round(ms / DAY);
+  if (days < 14) return relative.format(days, "day");
+  return relative.format(Math.round(days / 7), "week");
+}
+
+/**
+ * The stack's status: how many studied cards are due now (or, when none are, when the next one is
+ * due) and how many cards are unstudied. Parts that don't apply are left out.
+ */
+export function stackStatus(dueTimes: number[], unstudied: number, now: number): string {
+  const due = dueTimes.filter((t) => t <= now).length;
+  const next = Math.min(...dueTimes.filter((t) => t > now));
+  const parts: string[] = [];
+  if (due > 0) parts.push(`${due} ${due === 1 ? "card" : "cards"} due now`);
+  else if (Number.isFinite(next)) parts.push(`Next due ${inTime(next, now)}`);
+  if (unstudied > 0) parts.push(`${unstudied} unstudied`);
+  return parts.join(" · ") || "No cards";
+}
+
+/** The current time, updated every 30 seconds and whenever the page comes back into view. */
+function useNow() {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    const timer = setInterval(tick, 30_000);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+  return now;
+}
+
+/** `dueTimes` has the due time of each studied card, in ms since the epoch. */
 export function Splash({
   title,
-  studied,
-  total,
+  dueTimes,
+  unstudied,
   onOpen,
   onExport,
 }: {
   title: string;
-  studied: number;
-  total: number;
+  dueTimes: number[];
+  unstudied: number;
   onOpen: () => void;
   onExport: () => void;
 }) {
+  const now = useNow();
   return (
     <div className="flex h-full flex-col">
       <h1 className="px-5 pt-10 pb-6 text-3xl font-bold">Arabic Flashcards</h1>
@@ -103,7 +157,7 @@ export function Splash({
             <span className="flex-1">
               <span className="block text-lg font-medium">{title}</span>
               <span className="block text-sm opacity-60">
-                {studied} of {total} studied
+                {stackStatus(dueTimes, unstudied, now)}
               </span>
             </span>
             <ChevronIcon />
@@ -122,17 +176,19 @@ export function Splash({
   );
 }
 
-/** The level column: "new" (dimmed) for unstudied cards, red below 0, green above. */
+/** The level column: a smaller, dimmed "new" for unstudied cards, red below 0, green above. */
 function Level({ level }: { level: number | null }) {
   const color =
     level === null
-      ? "opacity-50"
+      ? "text-sm opacity-50"
       : level < 0
         ? "text-red-600 dark:text-red-400"
         : level > 0
           ? "text-green-700 dark:text-green-400"
           : "";
-  return <span className={`w-10 shrink-0 text-right tabular-nums ${color}`}>{level ?? "new"}</span>;
+  return (
+    <span className={`w-10 shrink-0 text-center tabular-nums ${color}`}>{level ?? "new"}</span>
+  );
 }
 
 /** `rows` are in list order; `level` is null for a card not yet studied. */
