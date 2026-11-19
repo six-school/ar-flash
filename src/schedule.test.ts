@@ -5,6 +5,8 @@ const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 const t0 = Date.parse("2026-11-19T21:00:00.000Z");
 const iso = (ms: number) => new Date(ms).toISOString();
+const ids = (group: { id: number }[]) => group.map((c) => c.id);
+const sorted = (group: { id: number }[]) => ids(group).toSorted((a, b) => a - b);
 
 describe("review", () => {
   it("takes a new card to level 1 on a correct answer", () => {
@@ -77,35 +79,31 @@ describe("sessionOrder", () => {
     // 5 and 6 are new.
   };
 
-  it("puts due cards first, then new cards, then cards not yet due (soonest first)", () => {
-    const ids = sessionOrder(cards, reviews, t0, Math.random).map((c) => c.id);
-    expect(ids.slice(0, 2).toSorted((a, b) => a - b)).toEqual([1, 2]);
-    expect(ids.slice(2, 4).toSorted((a, b) => a - b)).toEqual([5, 6]);
-    expect(ids.slice(4)).toEqual([4, 3]);
+  it("splits the cards into due, new, and not yet due (soonest first)", () => {
+    const session = sessionOrder(cards, reviews, t0, Math.random);
+    expect(sorted(session.due)).toEqual([1, 2]);
+    expect(sorted(session.unstudied)).toEqual([5, 6]);
+    expect(ids(session.notYetDue)).toEqual([4, 3]);
   });
 
   it("shuffles cards with the given random function", () => {
     // With random() always 0, each Fisher–Yates step swaps position i with position 0.
-    const ids = sessionOrder(cards, {}, t0, () => 0).map((c) => c.id);
-    expect(ids).toEqual([2, 3, 4, 5, 6, 1]);
+    expect(ids(sessionOrder(cards, {}, t0, () => 0).unstudied)).toEqual([2, 3, 4, 5, 6, 1]);
   });
 
   it("leaves due cards in shuffled order instead of sorting them by due time", () => {
     // With random() near 1, the shuffle leaves the cards in place, so card 1 (due 1 hour ago)
     // stays before card 2 (due 15 hours ago).
-    const kept = sessionOrder(cards, reviews, t0, () => 0.999).map((c) => c.id);
-    expect(kept).toEqual([1, 2, 5, 6, 4, 3]);
+    expect(ids(sessionOrder(cards, reviews, t0, () => 0.999).due)).toEqual([1, 2]);
     // With random() always 0, the shuffle gives 2, 3, 4, 5, 6, 1, so card 2 comes first.
-    const swapped = sessionOrder(cards, reviews, t0, () => 0).map((c) => c.id);
-    expect(swapped).toEqual([2, 1, 5, 6, 4, 3]);
+    expect(ids(sessionOrder(cards, reviews, t0, () => 0).due)).toEqual([2, 1]);
   });
 
-  it("counts a card due exactly now as due, ahead of new cards", () => {
+  it("counts a card due exactly now as due, not new", () => {
     const pair = [{ id: 1 }, { id: 2 }];
-    const dueNow = { 2: { level: 0, reviewedAt: iso(t0) } };
-    // The shuffle leaves new card 1 first; card 2 still comes before it.
-    const ids = sessionOrder(pair, dueNow, t0, () => 0.999).map((c) => c.id);
-    expect(ids).toEqual([2, 1]);
+    const session = sessionOrder(pair, { 2: { level: 0, reviewedAt: iso(t0) } }, t0, Math.random);
+    expect(ids(session.due)).toEqual([2]);
+    expect(ids(session.unstudied)).toEqual([1]);
   });
 });
 

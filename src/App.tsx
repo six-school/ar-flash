@@ -12,7 +12,7 @@ type Card = { id: number; arabic: string; plain: string; english: string };
 type Screen =
   | { name: "home" }
   | { name: "stack" }
-  | { name: "study"; cards: Card[] }
+  | { name: "study"; cards: Card[]; dueCount: number; unstudiedCount: number }
   | { name: "card"; cards: Card[]; index: number };
 
 const depth = { home: 0, stack: 1, study: 2, card: 2 } as const;
@@ -82,9 +82,20 @@ export default function App() {
           listScroll.current = top;
         }}
         onBack={() => go({ name: "home" })}
-        onGo={() =>
-          go({ name: "study", cards: sessionOrder(all, progress, Date.now(), Math.random) })
-        }
+        onGo={() => {
+          const { due, unstudied, notYetDue } = sessionOrder(
+            all,
+            progress,
+            Date.now(),
+            Math.random,
+          );
+          go({
+            name: "study",
+            cards: [...due, ...unstudied, ...notYetDue],
+            dueCount: due.length,
+            unstudiedCount: unstudied.length,
+          });
+        }}
         onOpenCard={(id) =>
           go({ name: "card", cards: ordered, index: ordered.findIndex((c) => c.id === id) })
         }
@@ -104,7 +115,15 @@ export default function App() {
       />
     );
   } else {
-    view = <Study cards={screen.cards} onAnswer={answer} onExit={() => go({ name: "stack" })} />;
+    view = (
+      <Study
+        cards={screen.cards}
+        dueCount={screen.dueCount}
+        unstudiedCount={screen.unstudiedCount}
+        onAnswer={answer}
+        onExit={() => go({ name: "stack" })}
+      />
+    );
   }
 
   return (

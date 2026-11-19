@@ -56,33 +56,34 @@ export function review(prev: Review | undefined, remembered: boolean, now: numbe
 const sortKey = (r: Review | undefined, now: number) => (r ? dueAt(r) : now);
 
 /**
- * The order of a session starting at `now`: cards that are due, then new cards, both shuffled
- * with `random`, then cards not yet due (soonest first, ties shuffled). Due cards aren't sorted by
- * due time, because cards answered together would then come back in the order they were answered.
+ * A session starting at `now`, in the order it runs: cards that are due, then new cards, both
+ * shuffled with `random`, then cards not yet due (soonest first, ties shuffled). Due cards aren't
+ * sorted by due time, because cards answered together would then come back in the order they
+ * were answered.
  */
 export function sessionOrder<T extends { id: number }>(
   cards: T[],
   reviews: Reviews,
   now: number,
   random: () => number,
-): T[] {
+): { due: T[]; unstudied: T[]; notYetDue: T[] } {
   const a = [...cards];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
   }
   const due: T[] = [];
-  const fresh: T[] = [];
-  const later: T[] = [];
+  const unstudied: T[] = [];
+  const notYetDue: T[] = [];
   for (const c of a) {
     const r = reviews[c.id];
-    if (!r) fresh.push(c);
+    if (!r) unstudied.push(c);
     else if (dueAt(r) <= now) due.push(c);
-    else later.push(c);
+    else notYetDue.push(c);
   }
   // The sort is stable, so the shuffle survives among equal due times.
-  later.sort((x, y) => sortKey(reviews[x.id], now) - sortKey(reviews[y.id], now));
-  return [...due, ...fresh, ...later];
+  notYetDue.sort((x, y) => sortKey(reviews[x.id], now) - sortKey(reviews[y.id], now));
+  return { due, unstudied, notYetDue };
 }
 
 /**

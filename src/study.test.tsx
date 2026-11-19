@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
-import { Study } from "./study";
+import { Study, sessionHeader } from "./study";
 import "./index.css";
 
 const card = { id: 7, arabic: "ثابِت", plain: "ثابت", english: "fixed, stable" };
@@ -8,7 +8,7 @@ const card = { id: 7, arabic: "ثابِت", plain: "ثابت", english: "fixed, 
 function renderStudy(onAnswer = vi.fn(() => () => {})) {
   return render(
     <div style={{ width: 400, height: 700 }}>
-      <Study cards={[card]} onAnswer={onAnswer} onExit={() => {}} />
+      <Study cards={[card]} dueCount={0} unstudiedCount={1} onAnswer={onAnswer} onExit={() => {}} />
     </div>,
   );
 }
@@ -88,5 +88,66 @@ describe("Study card", () => {
     const offset = () => centre(word.element()) - centre(screen.getByTestId("card").element());
     // Polled, because the card is still turning over just after the flip.
     await expect.poll(() => Math.abs(offset())).toBeLessThan(1);
+  });
+});
+
+describe("sessionHeader", () => {
+  const counts = { due: 32, unstudied: 49, total: 184 };
+
+  it("counts through the due cards and gives the number of new cards", () => {
+    expect(sessionHeader(0, counts)).toBe("1 / 32 due, 49 new");
+    expect(sessionHeader(31, counts)).toBe("32 / 32 due, 49 new");
+  });
+
+  it("counts through the new cards after the due ones", () => {
+    expect(sessionHeader(32, counts)).toBe("1 / 49 new");
+    expect(sessionHeader(80, counts)).toBe("49 / 49 new");
+  });
+
+  it("counts through the cards not yet due as extra study", () => {
+    expect(sessionHeader(81, counts)).toBe("Extra study (1 / 103)");
+    expect(sessionHeader(183, counts)).toBe("Extra study (103 / 103)");
+  });
+
+  it("leaves out the new count when there are no new cards", () => {
+    expect(sessionHeader(1, { due: 3, unstudied: 0, total: 10 })).toBe("2 / 3 due");
+    expect(sessionHeader(3, { due: 3, unstudied: 0, total: 10 })).toBe("Extra study (1 / 7)");
+  });
+
+  it("starts with the new cards when no card is due", () => {
+    expect(sessionHeader(0, { due: 0, unstudied: 5, total: 5 })).toBe("1 / 5 new");
+  });
+});
+
+describe("Study header", () => {
+  it("moves from the due card to the new card to extra study, and keeps the last header at the end", async () => {
+    const cards = [
+      { id: 1, arabic: "أَب", plain: "أب", english: "father" },
+      card,
+      { id: 9, arabic: "تاج", plain: "تاج", english: "crown" },
+    ];
+    const screen = await render(
+      <div style={{ width: 400, height: 700 }}>
+        <Study
+          cards={cards}
+          dueCount={1}
+          unstudiedCount={1}
+          onAnswer={() => () => {}}
+          onExit={() => {}}
+        />
+      </div>,
+    );
+    const answer = async () => {
+      await screen.getByRole("button", { name: "Show answer" }).click();
+      await screen.getByRole("button", { name: /Remembered/ }).click();
+    };
+    await expect.element(screen.getByText("1 / 1 due, 1 new")).toBeVisible();
+    await answer();
+    await expect.element(screen.getByText("1 / 1 new")).toBeVisible();
+    await answer();
+    await expect.element(screen.getByText("Extra study (1 / 1)")).toBeVisible();
+    await answer();
+    await expect.element(screen.getByText("Session complete")).toBeVisible();
+    await expect.element(screen.getByText("Extra study (1 / 1)")).toBeVisible();
   });
 });

@@ -6,12 +6,32 @@ import { BackIcon, IconButton, TopBar, UndoIcon } from "./screens";
 type Flashcard = { id: number; arabic: string; plain: string; english: string };
 type Outcome = "remembered" | "forgotten";
 
+/**
+ * The study screen's header for the card at `index` (0-based) in a session whose first `due`
+ * cards are due, whose next `unstudied` are new, and whose remaining cards, up to `total`, are not
+ * yet due: "2 / 32 due, 49 new", then "3 / 49 new", then "Extra study (4 / 103)". A count of
+ * new cards that is zero is left out.
+ */
+export function sessionHeader(
+  index: number,
+  { due, unstudied, total }: { due: number; unstudied: number; total: number },
+): string {
+  if (index < due) return `${index + 1} / ${due} due` + (unstudied ? `, ${unstudied} new` : "");
+  if (index < due + unstudied) return `${index - due + 1} / ${unstudied} new`;
+  return `Extra study (${index - due - unstudied + 1} / ${total - due - unstudied})`;
+}
+
 export function Study({
   cards,
+  dueCount,
+  unstudiedCount,
   onAnswer,
   onExit,
 }: {
+  /** The session's cards: the due cards, then the new ones, then those not yet due. */
   cards: Flashcard[];
+  dueCount: number;
+  unstudiedCount: number;
   /** Records an answer and returns a function that undoes it. */
   onAnswer: (id: number, remembered: boolean) => () => void;
   onExit: () => void;
@@ -48,9 +68,16 @@ export function Study({
           </IconButton>
         }
         center={
-          <span className="text-sm font-normal tabular-nums opacity-60">
-            {Math.min(index + 1, cards.length)} / {cards.length}
-          </span>
+          cards.length > 0 && (
+            <span className="text-sm font-normal tabular-nums opacity-60">
+              {/* After the last card, it keeps the last card's header. */}
+              {sessionHeader(Math.min(index, cards.length - 1), {
+                due: dueCount,
+                unstudied: unstudiedCount,
+                total: cards.length,
+              })}
+            </span>
+          )
         }
         right={
           <IconButton label="Undo" onClick={undo} disabled={index === 0}>
