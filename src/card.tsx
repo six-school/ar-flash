@@ -1,24 +1,87 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useIsPresent, type PanInfo } from "motion/react";
 import { BackIcon, IconButton, SpeakerIcon, TopBar, cardStatus, useNow } from "./screens";
 import { speak } from "./speech";
 
 type CardText = { arabic: string; plain: string; english: string };
 
+// How far, or how fast, a card has to be dragged for the drag to count as a swipe.
+const SWIPE_DISTANCE = 100;
+const SWIPE_VELOCITY = 500;
+
+/** -1 for a swipe to the left, 1 for a swipe to the right, 0 for a drag too short to count. */
+export function swipeDirection(info: PanInfo): -1 | 0 | 1 {
+  if (info.offset.x < -SWIPE_DISTANCE || info.velocity.x < -SWIPE_VELOCITY) return -1;
+  if (info.offset.x > SWIPE_DISTANCE || info.velocity.x > SWIPE_VELOCITY) return 1;
+  return 0;
+}
+
+/**
+ * Props for a draggable card, so that the click ending a drag isn't taken as a tap on whatever is
+ * under the pointer, such as the Arabic word.
+ */
+export function useDragClickGuard() {
+  const dragged = useRef(false);
+  return {
+    onPointerDownCapture: () => {
+      dragged.current = false;
+    },
+    onDragStart: () => {
+      dragged.current = true;
+    },
+    onClickCapture: (e: { stopPropagation: () => void }) => {
+      if (dragged.current) e.stopPropagation();
+    },
+  };
+}
+
 /**
  * One card's details, opened from the stack's card list: its answer side, with its level and when
- * it's due in the top bar. `review` is undefined for a card not yet studied.
+ * it's due in the top bar. `review` is undefined for a card not yet studied. Swiping left, or the
+ * right arrow key, shows the next card in the list, and swiping right, or the left arrow key, the
+ * previous one. `onNext` and `onPrevious` are undefined at the ends of the list.
  */
 export function CardDetails({
   card,
   review,
   onBack,
+  onPrevious,
+  onNext,
 }: {
-  card: CardText;
+  card: { id: number } & CardText;
   review: { level: number; due: number } | undefined;
   onBack: () => void;
+  onPrevious?: () => void;
+  onNext?: () => void;
 }) {
-  const [vowels, setVowels] = useState(false);
   const now = useNow();
+  // 1 when moving to the next card, -1 to the previous one: the side the new card comes in from.
+  const [dir, setDir] = useState(1);
+
+  /** Move to the next (1) or previous (-1) card; false at the end of the list. */
+  const step = (to: 1 | -1) => {
+    const move = to === 1 ? onNext : onPrevious;
+    if (!move) return false;
+    setDir(to);
+    move();
+    return true;
+  };
+
+  // Keyboard: ← previous card, → next card. Ignored while this screen is leaving, so a key pressed
+  // just after Back doesn't bring it back.
+  const isPresent = useIsPresent();
+  const latest = useRef({ step, isPresent });
+  latest.current = { step, isPresent };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey || !latest.current.isPresent) return;
+      if (e.key === "ArrowLeft") latest.current.step(-1);
+      else if (e.key === "ArrowRight") latest.current.step(1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div className="flex h-full flex-col">
       <TopBar
@@ -33,12 +96,60 @@ export function CardDetails({
           </span>
         }
       />
-      <div className="relative mx-4 mb-[max(1rem,env(safe-area-inset-bottom))] flex-1 overflow-hidden rounded-3xl border border-neutral-500/30">
-        <FitText>
-          <Answer card={card} vowels={vowels} onToggleVowels={() => setVowels((v) => !v)} />
-        </FitText>
+      <div className="relative mx-4 mb-[max(1rem,env(safe-area-inset-bottom))] flex-1">
+        <AnimatePresence initial={false} custom={dir}>
+          <SlidingCard key={card.id} card={card} dir={dir} onSwipe={step} />
+        </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+// A new card slides in from the side it comes from (`dir` 1: from the right) as the old one slides
+// out the other way.
+const slide = {
+  enter: (dir: number) => ({ x: dir * window.innerWidth }),
+  center: { x: 0 },
+  exit: (dir: number) => ({ x: -dir * window.innerWidth }),
+};
+
+/**
+ * A card on the details screen. It follows a horizontal drag; a swipe left asks for the next card
+ * and a swipe right for the previous one, and it springs back if there's none. Keyed by card, so
+ * each card mounts fresh and unvowelled.
+ */
+function SlidingCard({
+  card,
+  dir,
+  onSwipe,
+}: {
+  card: CardText;
+  dir: number;
+  onSwipe: (to: 1 | -1) => boolean;
+}) {
+  const [vowels, setVowels] = useState(false);
+  const guard = useDragClickGuard();
+  return (
+    <motion.div
+      custom={dir}
+      variants={slide}
+      initial="enter"
+      animate="center"
+      exit="exit"
+      transition={{ duration: 0.28, ease: [0.2, 0, 0, 1] }}
+      drag="x"
+      dragSnapToOrigin
+      {...guard}
+      onDragEnd={(_, info) => {
+        const swipe = swipeDirection(info);
+        if (swipe !== 0) onSwipe(swipe === -1 ? 1 : -1);
+      }}
+      className="absolute inset-0 overflow-hidden rounded-3xl border border-neutral-500/30 bg-white select-none dark:bg-black"
+    >
+      <FitText>
+        <Answer card={card} vowels={vowels} onToggleVowels={() => setVowels((v) => !v)} />
+      </FitText>
+    </motion.div>
   );
 }
 

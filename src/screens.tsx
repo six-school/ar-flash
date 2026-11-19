@@ -204,12 +204,14 @@ function Level({ level }: { level: number | null }) {
 /**
  * `rows` are in list order; `level` is null for a card not yet studied. The card list opens
  * scrolled to `initialScroll` and reports its scroll position through `onScroll`, so it can come
- * back to the same place after a card's details.
+ * back to the same place after cards' details. If the row for `revealId` is then out of view, the
+ * list scrolls to centre it.
  */
 export function StackScreen({
   title,
   rows,
   initialScroll,
+  revealId,
   onScroll,
   onBack,
   onGo,
@@ -218,6 +220,7 @@ export function StackScreen({
   title: string;
   rows: { id: number; plain: string; level: number | null }[];
   initialScroll: number;
+  revealId?: number;
   onScroll: (top: number) => void;
   onBack: () => void;
   onGo: () => void;
@@ -226,7 +229,14 @@ export function StackScreen({
   const list = useRef<HTMLUListElement>(null);
   // Only on mount: after that, the scroll position is the user's.
   useLayoutEffect(() => {
-    list.current!.scrollTop = initialScroll;
+    const ul = list.current!;
+    ul.scrollTop = initialScroll;
+    const row = ul.querySelector(`[data-id="${revealId}"]`);
+    if (!row) return;
+    const r = row.getBoundingClientRect();
+    const u = ul.getBoundingClientRect();
+    if (r.top < u.top || r.bottom > u.bottom)
+      ul.scrollTop += r.top - u.top - (u.height - r.height) / 2;
   }, []);
 
   return (
@@ -254,7 +264,7 @@ export function StackScreen({
         className="flex-1 overflow-y-auto border-t border-neutral-500/25 pb-[env(safe-area-inset-bottom)]"
       >
         {rows.map((r) => (
-          <li key={r.id} className="border-b border-neutral-500/15">
+          <li key={r.id} data-id={r.id} className="border-b border-neutral-500/15">
             <button
               onClick={() => onOpenCard(r.id)}
               className="flex w-full cursor-pointer items-center gap-4 px-5 py-2 text-left hover:bg-neutral-500/10 active:bg-neutral-500/10"

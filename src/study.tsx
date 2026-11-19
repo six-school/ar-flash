@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { animate, motion, useMotionValue, useTransform, type PanInfo } from "motion/react";
-import { Answer, FitText, Question } from "./card";
+import { Answer, FitText, Question, swipeDirection, useDragClickGuard } from "./card";
 import { BackIcon, IconButton, TopBar, UndoIcon } from "./screens";
 
 type Flashcard = { id: number; arabic: string; plain: string; english: string };
@@ -86,8 +86,8 @@ export function Study({
 
 const RED = "rgb(220, 38, 38)";
 const GREEN = "rgb(22, 163, 74)";
+// The swipe distance at which the red or green underlay is fully shown.
 const SWIPE_DISTANCE = 100;
-const SWIPE_VELOCITY = 500;
 
 /**
  * One card. Keyed by position, so each new card mounts fresh: unflipped, centred and unvowelled.
@@ -115,8 +115,7 @@ function Card({
   const forgotOpacity = useTransform(x, [-SWIPE_DISTANCE, -20], [1, 0]);
   const rememberedOpacity = useTransform(x, [20, SWIPE_DISTANCE], [0, 1]);
   const leaving = useRef(false);
-  // Set when a press turns into a drag, so the click that ends the drag isn't taken as a tap.
-  const dragged = useRef(false);
+  const guard = useDragClickGuard();
 
   // Fly the card off in the swipe direction, then record the result.
   const commit = (outcome: Outcome) => {
@@ -131,9 +130,9 @@ function Card({
   };
 
   const onDragEnd = (_: unknown, info: PanInfo) => {
-    if (info.offset.x < -SWIPE_DISTANCE || info.velocity.x < -SWIPE_VELOCITY) commit("forgotten");
-    else if (info.offset.x > SWIPE_DISTANCE || info.velocity.x > SWIPE_VELOCITY)
-      commit("remembered");
+    const swipe = swipeDirection(info);
+    if (swipe === -1) commit("forgotten");
+    else if (swipe === 1) commit("remembered");
     else animate(x, 0, { type: "spring", stiffness: 500, damping: 35 });
   };
 
@@ -187,16 +186,8 @@ function Card({
           style={{ x, rotate }}
           drag={revealed ? "x" : false}
           dragMomentum={false}
-          onPointerDownCapture={() => {
-            dragged.current = false;
-          }}
-          onDragStart={() => {
-            dragged.current = true;
-          }}
+          {...guard}
           onDragEnd={onDragEnd}
-          onClickCapture={(e) => {
-            if (dragged.current) e.stopPropagation();
-          }}
           onClick={() => {
             if (!revealed) onFlip();
           }}

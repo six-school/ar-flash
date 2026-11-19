@@ -13,7 +13,7 @@ type Screen =
   | { name: "home" }
   | { name: "stack" }
   | { name: "study"; cards: Card[] }
-  | { name: "card"; card: Card };
+  | { name: "card"; cards: Card[]; index: number };
 
 const depth = { home: 0, stack: 1, study: 2, card: 2 } as const;
 
@@ -29,11 +29,20 @@ export default function App() {
   const { progress, answer } = useProgress();
   const [screen, setScreen] = useState<Screen>({ name: "home" });
   const [dir, setDir] = useState(1);
-  // The card list's scroll position, kept while a card's details are open.
+  // The card list's scroll position, kept while cards' details are open, and the last card viewed
+  // there, which the list shows when it comes back.
   const listScroll = useRef(0);
+  const listReveal = useRef<number | undefined>(undefined);
 
   const go = (next: Screen) => {
-    if (next.name === "stack" && screen.name !== "card") listScroll.current = 0;
+    if (next.name === "stack") {
+      if (screen.name === "card") {
+        listReveal.current = screen.cards[screen.index].id;
+      } else {
+        listScroll.current = 0;
+        listReveal.current = undefined;
+      }
+    }
     setDir(Math.sign(depth[next.name] - depth[screen.name]) || 1);
     setScreen(next);
   };
@@ -57,7 +66,8 @@ export default function App() {
       />
     );
   } else if (screen.name === "stack") {
-    const rows = listOrder(all, progress, Date.now()).map((c) => ({
+    const ordered = listOrder(all, progress, Date.now());
+    const rows = ordered.map((c) => ({
       id: c.id,
       plain: c.plain,
       level: progress[c.id]?.level ?? null,
@@ -67,6 +77,7 @@ export default function App() {
         title={title}
         rows={rows}
         initialScroll={listScroll.current}
+        revealId={listReveal.current}
         onScroll={(top) => {
           listScroll.current = top;
         }}
@@ -74,19 +85,22 @@ export default function App() {
         onGo={() =>
           go({ name: "study", cards: sessionOrder(all, progress, Date.now(), Math.random) })
         }
-        onOpenCard={(id) => {
-          const card = all.find((c) => c.id === id);
-          if (card) go({ name: "card", card });
-        }}
+        onOpenCard={(id) =>
+          go({ name: "card", cards: ordered, index: ordered.findIndex((c) => c.id === id) })
+        }
       />
     );
   } else if (screen.name === "card") {
-    const r = progress[screen.card.id];
+    const { cards: order, index } = screen;
+    const r = progress[order[index].id];
+    const show = (i: number) => setScreen({ name: "card", cards: order, index: i });
     view = (
       <CardDetails
-        card={screen.card}
+        card={order[index]}
         review={r && { level: r.level, due: dueAt(r) }}
         onBack={() => go({ name: "stack" })}
+        onPrevious={index > 0 ? () => show(index - 1) : undefined}
+        onNext={index < order.length - 1 ? () => show(index + 1) : undefined}
       />
     );
   } else {

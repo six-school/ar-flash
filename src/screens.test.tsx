@@ -9,13 +9,19 @@ const rows = Array.from({ length: 60 }, (_, i) => ({
   level: null,
 }));
 
-function renderStack({ initialScroll = 0, onScroll = () => {}, onOpenCard = () => {} } = {}) {
+function renderStack({
+  initialScroll = 0,
+  revealId = undefined as number | undefined,
+  onScroll = () => {},
+  onOpenCard = () => {},
+} = {}) {
   return render(
     <div style={{ width: 400, height: 700 }}>
       <StackScreen
         title="Arabic → English"
         rows={rows}
         initialScroll={initialScroll}
+        revealId={revealId}
         onScroll={onScroll}
         onBack={() => {}}
         onGo={() => {}}
@@ -40,5 +46,19 @@ describe("StackScreen", () => {
     expect(list.scrollTop).toBe(300);
     list.scrollTop = 500;
     await expect.poll(() => onScroll.mock.lastCall?.[0]).toBe(500);
+  });
+
+  it("scrolls to show the row of the last card viewed if it's out of view", async () => {
+    const screen = await renderStack({ revealId: 50 });
+    const list = screen.getByRole("list").element().getBoundingClientRect();
+    const row = screen.getByRole("button", { name: "new كلمة 50", exact: true }).element();
+    const r = row.getBoundingClientRect();
+    expect(r.top).toBeGreaterThanOrEqual(list.top);
+    expect(r.bottom).toBeLessThanOrEqual(list.bottom);
+  });
+
+  it("leaves the scroll position alone when that row is already in view", async () => {
+    const screen = await renderStack({ initialScroll: 300, revealId: 12 });
+    expect(screen.getByRole("list").element().scrollTop).toBe(300);
   });
 });
