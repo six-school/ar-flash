@@ -3,7 +3,7 @@ import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { CardDetails } from "./card";
 import { useCards } from "./cards";
 import { exportProgress, useProgress } from "./progress";
-import { dueAt, listOrder, sessionOrder } from "./schedule";
+import { dueAt, listOrder, sessionOrder, studied } from "./schedule";
 import { Splash, StackScreen } from "./screens";
 import { Study } from "./study";
 
@@ -26,7 +26,7 @@ const views = {
 
 export default function App() {
   const cards = useCards();
-  const { progress, answer } = useProgress();
+  const { progress, answer, setSuspended } = useProgress();
   const [screen, setScreen] = useState<Screen>({ name: "home" });
   const [dir, setDir] = useState(1);
   // The card list's scroll position, kept while cards' details are open, and the last card viewed
@@ -57,9 +57,10 @@ export default function App() {
       <Splash
         title={title}
         dueTimes={all.flatMap((c) => {
-          const r = progress[c.id];
-          return r ? [dueAt(r)] : [];
+          const r = studied(progress[c.id]);
+          return r && !r.suspended ? [dueAt(r)] : [];
         })}
+        // A suspended card has a record even if it was never studied, so it isn't counted here.
         unstudied={all.filter((c) => !progress[c.id]).length}
         onOpen={() => go({ name: "stack" })}
         onExport={() => exportProgress(progress)}
@@ -70,7 +71,8 @@ export default function App() {
     const rows = ordered.map((c) => ({
       id: c.id,
       plain: c.plain,
-      level: progress[c.id]?.level ?? null,
+      level: studied(progress[c.id])?.level ?? null,
+      suspended: progress[c.id]?.suspended === true,
     }));
     view = (
       <StackScreen
@@ -103,12 +105,16 @@ export default function App() {
     );
   } else if (screen.name === "card") {
     const { cards: order, index } = screen;
-    const r = progress[order[index].id];
+    const { id } = order[index];
+    const r = studied(progress[id]);
+    const suspended = progress[id]?.suspended === true;
     const show = (i: number) => setScreen({ name: "card", cards: order, index: i });
     view = (
       <CardDetails
         card={order[index]}
         review={r && { level: r.level, due: dueAt(r) }}
+        suspended={suspended}
+        onToggleSuspended={() => setSuspended(id, !suspended)}
         onBack={() => go({ name: "stack" })}
         onPrevious={index > 0 ? () => show(index - 1) : undefined}
         onNext={index < order.length - 1 ? () => show(index + 1) : undefined}
@@ -121,6 +127,7 @@ export default function App() {
         dueCount={screen.dueCount}
         unstudiedCount={screen.unstudiedCount}
         onAnswer={answer}
+        onSuspend={(id) => setSuspended(id, true)}
         onExit={() => go({ name: "stack" })}
       />
     );

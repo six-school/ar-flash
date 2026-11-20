@@ -14,11 +14,15 @@ const HOUR = 60 * 60 * 1000;
 
 function renderDetails({
   review,
+  suspended = false,
+  onToggleSuspended = () => {},
   onBack = () => {},
   onPrevious,
   onNext,
 }: {
   review?: { level: number; due: number };
+  suspended?: boolean;
+  onToggleSuspended?: () => void;
   onBack?: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
@@ -28,6 +32,8 @@ function renderDetails({
       <CardDetails
         card={card}
         review={review}
+        suspended={suspended}
+        onToggleSuspended={onToggleSuspended}
         onBack={onBack}
         onPrevious={onPrevious}
         onNext={onNext}
@@ -70,6 +76,8 @@ function Browser() {
       <CardDetails
         card={cards[index]}
         review={undefined}
+        suspended={false}
+        onToggleSuspended={() => {}}
         onBack={() => {}}
         onPrevious={index > 0 ? () => setIndex(index - 1) : undefined}
         onNext={index < cards.length - 1 ? () => setIndex(index + 1) : undefined}
@@ -103,6 +111,34 @@ describe("CardDetails", () => {
   it("shows the card's level and when it's due", async () => {
     const screen = await renderDetails({ review: { level: 3, due: Date.now() + 5 * HOUR } });
     await expect.element(screen.getByText("Level 3 · due in 5 hours")).toBeVisible();
+  });
+
+  it("suspends the card from the button on the card", async () => {
+    const onToggleSuspended = vi.fn();
+    const screen = await renderDetails({ onToggleSuspended });
+    await screen.getByRole("button", { name: "Suspend" }).click();
+    expect(onToggleSuspended).toHaveBeenCalledOnce();
+  });
+
+  it("says a suspended card is suspended and offers to unsuspend it", async () => {
+    const onToggleSuspended = vi.fn();
+    const screen = await renderDetails({
+      review: { level: 3, due: Date.now() - HOUR },
+      suspended: true,
+      onToggleSuspended,
+    });
+    await expect.element(screen.getByText("Level 3 · suspended")).toBeVisible();
+    await screen.getByRole("button", { name: "Unsuspend" }).click();
+    expect(onToggleSuspended).toHaveBeenCalledOnce();
+  });
+
+  it("doesn't swipe when a drag starts on the suspend button", async () => {
+    const onNext = vi.fn();
+    const onToggleSuspended = vi.fn();
+    const screen = await renderDetails({ onNext, onToggleSuspended });
+    await drag(screen.getByRole("button", { name: "Suspend" }).element(), -200);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(onNext).not.toHaveBeenCalled();
   });
 
   it("goes back from the back button", async () => {

@@ -1,6 +1,14 @@
 /** A studied card's progress: its level and when it was last reviewed (an ISO timestamp). */
 type Review = { level: number; reviewedAt: string };
-type Reviews = Partial<Record<number, Review>>;
+/**
+ * A card's stored record: its progress once studied, with `suspended: true` while it's suspended.
+ * A suspended card that was never studied has only the flag. A new card has no record.
+ */
+type CardRecord = (Review & { suspended?: true }) | { suspended: true };
+type Records = Partial<Record<number, CardRecord>>;
+
+/** A card's progress, or undefined if it was never studied. */
+export const studied = (r: CardRecord | undefined) => (r && "level" in r ? r : undefined);
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -57,13 +65,13 @@ const sortKey = (r: Review | undefined, now: number) => (r ? dueAt(r) : now);
 
 /**
  * A session starting at `now`, in the order it runs: cards that are due, then new cards, both
- * shuffled with `random`, then cards not yet due (soonest first, ties shuffled). Due cards aren't
- * sorted by due time, because cards answered together would then come back in the order they
- * were answered.
+ * shuffled with `random`, then cards not yet due (soonest first, ties shuffled). Suspended cards
+ * are left out. Due cards aren't sorted by due time, because cards answered together would then
+ * come back in the order they were answered.
  */
 export function sessionOrder<T extends { id: number }>(
   cards: T[],
-  reviews: Reviews,
+  records: Records,
   now: number,
   random: () => number,
 ): { due: T[]; unstudied: T[]; notYetDue: T[] } {
@@ -76,27 +84,29 @@ export function sessionOrder<T extends { id: number }>(
   const unstudied: T[] = [];
   const notYetDue: T[] = [];
   for (const c of a) {
-    const r = reviews[c.id];
+    if (records[c.id]?.suspended) continue;
+    const r = studied(records[c.id]);
     if (!r) unstudied.push(c);
     else if (dueAt(r) <= now) due.push(c);
     else notYetDue.push(c);
   }
   // The sort is stable, so the shuffle survives among equal due times.
-  notYetDue.sort((x, y) => sortKey(reviews[x.id], now) - sortKey(reviews[y.id], now));
+  const key = (c: T) => sortKey(studied(records[c.id]), now);
+  notYetDue.sort((x, y) => key(x) - key(y));
   return { due, unstudied, notYetDue };
 }
 
 /**
  * The order of the stack's card list: overdue cards (most overdue first), then new cards, then
- * cards not yet due (soonest first), with ties broken by id. Unlike a session's order, it doesn't
- * change between visits.
+ * cards not yet due (soonest first), with ties broken by id. Suspended cards come last, in the
+ * same order among themselves. Unlike a session's order, it doesn't change between visits.
  */
 export function listOrder<T extends { id: number }>(
   cards: T[],
-  reviews: Reviews,
+  records: Records,
   now: number,
 ): T[] {
-  return cards.toSorted(
-    (x, y) => sortKey(reviews[x.id], now) - sortKey(reviews[y.id], now) || x.id - y.id,
-  );
+  const suspended = (c: T) => (records[c.id]?.suspended ? 1 : 0);
+  const key = (c: T) => sortKey(studied(records[c.id]), now);
+  return cards.toSorted((x, y) => suspended(x) - suspended(y) || key(x) - key(y) || x.id - y.id);
 }

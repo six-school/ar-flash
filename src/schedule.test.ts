@@ -105,6 +105,19 @@ describe("sessionOrder", () => {
     expect(ids(session.due)).toEqual([2]);
     expect(ids(session.unstudied)).toEqual([1]);
   });
+
+  it("leaves out suspended cards, studied or not", () => {
+    const records = {
+      ...reviews,
+      1: { ...reviews[1], suspended: true as const },
+      3: { ...reviews[3], suspended: true as const },
+      5: { suspended: true as const },
+    };
+    const session = sessionOrder(cards, records, t0, Math.random);
+    expect(ids(session.due)).toEqual([2]);
+    expect(ids(session.unstudied)).toEqual([6]);
+    expect(ids(session.notYetDue)).toEqual([4]);
+  });
 });
 
 describe("listOrder", () => {
@@ -115,5 +128,17 @@ describe("listOrder", () => {
       1: { level: 0, reviewedAt: iso(t0 - HOUR) }, // due 1 hour ago
     };
     expect(listOrder(cards, reviews, t0).map((c) => c.id)).toEqual([1, 5, 6, 3]);
+  });
+
+  it("puts suspended cards last, in the same order among themselves", () => {
+    const cards = [1, 2, 3, 4, 5, 6].map((id) => ({ id }));
+    const records = {
+      1: { level: 1, reviewedAt: iso(t0 - 3 * HOUR) }, // due 1 hour ago
+      2: { level: 3, reviewedAt: iso(t0 - 30 * HOUR), suspended: true as const }, // overdue
+      3: { level: 1, reviewedAt: iso(t0), suspended: true as const }, // due in 2 hours
+      4: { suspended: true as const }, // never studied
+      // 5 and 6 are new.
+    };
+    expect(listOrder(cards, records, t0).map((c) => c.id)).toEqual([1, 5, 6, 2, 4, 3]);
   });
 });

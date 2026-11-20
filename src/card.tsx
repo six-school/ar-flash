@@ -1,6 +1,15 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useIsPresent, type PanInfo } from "motion/react";
-import { BackIcon, IconButton, SpeakerIcon, TopBar, cardStatus, useNow } from "./screens";
+import {
+  BackIcon,
+  IconButton,
+  PauseIcon,
+  PlayIcon,
+  SpeakerIcon,
+  TopBar,
+  cardStatus,
+  useNow,
+} from "./screens";
 import { speak } from "./speech";
 
 type CardText = { arabic: string; plain: string; english: string };
@@ -36,20 +45,25 @@ export function useDragClickGuard() {
 }
 
 /**
- * One card's details, opened from the stack's card list: its answer side, with its level and when
- * it's due in the top bar. `review` is undefined for a card not yet studied. Swiping left, or the
- * right arrow key, shows the next card in the list, and swiping right, or the left arrow key, the
- * previous one. `onNext` and `onPrevious` are undefined at the ends of the list.
+ * One card's details, opened from the stack's card list: its answer side, with a button on it that
+ * suspends or unsuspends the card, and its level and when it's due in the top bar. `review` is
+ * undefined for a card not yet studied. Swiping left, or the right arrow key, shows the next card
+ * in the list, and swiping right, or the left arrow key, the previous one. `onNext` and
+ * `onPrevious` are undefined at the ends of the list.
  */
 export function CardDetails({
   card,
   review,
+  suspended,
+  onToggleSuspended,
   onBack,
   onPrevious,
   onNext,
 }: {
   card: { id: number } & CardText;
   review: { level: number; due: number } | undefined;
+  suspended: boolean;
+  onToggleSuspended: () => void;
   onBack: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
@@ -92,13 +106,20 @@ export function CardDetails({
         }
         center={
           <span className="text-sm font-normal tabular-nums opacity-60">
-            {cardStatus(review, now)}
+            {cardStatus(review, suspended, now)}
           </span>
         }
       />
       <div className="relative mx-4 mb-[max(1rem,env(safe-area-inset-bottom))] flex-1">
         <AnimatePresence initial={false} custom={dir}>
-          <SlidingCard key={card.id} card={card} dir={dir} onSwipe={step} />
+          <SlidingCard
+            key={card.id}
+            card={card}
+            dir={dir}
+            onSwipe={step}
+            suspended={suspended}
+            onToggleSuspended={onToggleSuspended}
+          />
         </AnimatePresence>
       </div>
     </div>
@@ -122,10 +143,14 @@ function SlidingCard({
   card,
   dir,
   onSwipe,
+  suspended,
+  onToggleSuspended,
 }: {
   card: CardText;
   dir: number;
   onSwipe: (to: 1 | -1) => boolean;
+  suspended: boolean;
+  onToggleSuspended: () => void;
 }) {
   const [vowels, setVowels] = useState(false);
   const guard = useDragClickGuard();
@@ -146,9 +171,10 @@ function SlidingCard({
       }}
       className="absolute inset-0 overflow-hidden rounded-3xl border border-neutral-500/30 bg-white select-none dark:bg-black"
     >
-      <FitText>
+      <FitText roomAbove>
         <Answer card={card} vowels={vowels} onToggleVowels={() => setVowels((v) => !v)} />
       </FitText>
+      <SuspendButton suspended={suspended} onClick={onToggleSuspended} />
     </motion.div>
   );
 }
@@ -254,20 +280,25 @@ function SpeakerSpace() {
   );
 }
 
-/** Speaks `text` in Arabic. */
-function SpeakButton({ text }: { text: string }) {
+/**
+ * A ref for a button on a swipeable card. The card starts a swipe from a native pointerdown on
+ * itself, which a React handler on the button would see too late to stop; stopping the native
+ * event keeps a press on the button from swiping.
+ */
+function useNoSwipe() {
   const ref = useRef<HTMLButtonElement>(null);
-
-  // In a study session the card starts a swipe from a native pointerdown on itself, which a React
-  // handler here would see too late to stop; stopping the native event keeps a press on this button
-  // from swiping.
   useEffect(() => {
     const el = ref.current;
     const stop = (e: PointerEvent) => e.stopPropagation();
     el?.addEventListener("pointerdown", stop);
     return () => el?.removeEventListener("pointerdown", stop);
   }, []);
+  return ref;
+}
 
+/** Speaks `text` in Arabic. */
+function SpeakButton({ text }: { text: string }) {
+  const ref = useNoSwipe();
   return (
     <button
       ref={ref}
@@ -282,6 +313,31 @@ function SpeakButton({ text }: { text: string }) {
       className={`${SPEAKER_BOX} cursor-pointer rounded-full opacity-60 hover:bg-neutral-500/15 hover:opacity-100`}
     >
       <SpeakerIcon className={SPEAKER_ICON} />
+    </button>
+  );
+}
+
+/**
+ * The button at the top centre of a card's answer side that suspends the card, or unsuspends it.
+ * It goes inside the card, after a FitText with `roomAbove`.
+ */
+export function SuspendButton({ suspended, onClick }: { suspended: boolean; onClick: () => void }) {
+  const ref = useNoSwipe();
+  const label = suspended ? "Unsuspend" : "Suspend";
+  return (
+    <button
+      ref={ref}
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={(e) => {
+        e.stopPropagation();
+        e.currentTarget.blur();
+        onClick();
+      }}
+      className="absolute top-2 left-1/2 grid size-11 -translate-x-1/2 cursor-pointer place-items-center rounded-full opacity-50 hover:bg-neutral-500/15 hover:opacity-100"
+    >
+      {suspended ? <PlayIcon className="size-5" /> : <PauseIcon className="size-5" />}
     </button>
   );
 }
@@ -312,8 +368,11 @@ function Line({ children }: { children: string }) {
   return <p className="my-[0.2em]">{content}</p>;
 }
 
-/** Sets the largest font size at which the content still fits its box, and refits on resize. */
-export function FitText({ children }: { children: ReactNode }) {
+/**
+ * Sets the largest font size at which the content still fits its box, and refits on resize.
+ * `roomAbove` leaves space at the top for a SuspendButton.
+ */
+export function FitText({ children, roomAbove }: { children: ReactNode; roomAbove?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const el = ref.current!;
@@ -340,7 +399,7 @@ export function FitText({ children }: { children: ReactNode }) {
   return (
     <div
       ref={ref}
-      className="absolute inset-0 flex flex-col justify-center overflow-hidden p-6 text-center leading-tight"
+      className={`absolute inset-0 flex flex-col justify-center overflow-hidden px-6 pb-6 text-center leading-tight ${roomAbove ? "pt-14" : "pt-6"}`}
     >
       {children}
     </div>

@@ -1,17 +1,27 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
-import { MAX_LEVEL, MIN_LEVEL, review } from "./schedule";
+import { MAX_LEVEL, MIN_LEVEL, review, studied } from "./schedule";
 
 const KEY = "flashcards-progress-v2";
 const OLD_KEY = "flashcards-progress-v1";
 
-/** Card id → the card's level and last counted review. New cards have no entry. */
+/**
+ * Card id → the card's level and last counted review, with `suspended: true` while the card is
+ * suspended. A new card has no entry, or only the flag if it's suspended.
+ */
 const progressSchema = z.partialRecord(
   z.string(),
-  z.object({ level: z.int().min(MIN_LEVEL).max(MAX_LEVEL), reviewedAt: z.iso.datetime() }),
+  z.union([
+    z.object({
+      level: z.int().min(MIN_LEVEL).max(MAX_LEVEL),
+      reviewedAt: z.iso.datetime(),
+      suspended: z.literal(true).optional(),
+    }),
+    z.object({ suspended: z.literal(true) }),
+  ]),
 );
 type Progress = z.infer<typeof progressSchema>;
-type Review = NonNullable<Progress[string]>;
+type CardRecord = NonNullable<Progress[string]>;
 
 /** Stored progress from its JSON text. Missing, malformed or invalid data gives empty progress. */
 export function parseProgress(text: string | null): Progress {
@@ -27,11 +37,23 @@ export function parseProgress(text: string | null): Progress {
 }
 
 /** A copy of `p` with card `id`'s record set to `r`, or removed when `r` is undefined. */
-export function withReview(p: Progress, id: number, r: Review | undefined): Progress {
+export function withRecord(p: Progress, id: number, r: CardRecord | undefined): Progress {
   const next = { ...p };
   if (r) next[id] = r;
   else delete next[id];
   return next;
+}
+
+/**
+ * Record `r` suspended, or not. Unsuspending removes the `suspended` key, and gives no record at all
+ * for a card that was never studied, so it's new again.
+ */
+export function withSuspended(r: CardRecord | undefined, suspended: boolean) {
+  if (suspended) return { ...r, suspended: true as const };
+  const progress = studied(r);
+  if (!progress) return undefined;
+  const { suspended: _, ...rest } = progress;
+  return rest;
 }
 
 function load(): Progress {
@@ -72,16 +94,24 @@ export function useProgress() {
   useEffect(() => save(progress), [progress]);
 
   /**
-   * Record an answer to card `id` and return a function that restores the card's previous record
-   * (or its absence). Each card mounts afresh after every answer or undo, so `progress` here is
-   * current for the card being answered.
+   * Record an answer to card `id`, keeping its suspension, and return a function that restores the
+   * card's previous record (or its absence). Each card mounts afresh after every answer or undo, so
+   * `progress` here is current for the card being answered.
    */
   const answer = (id: number, remembered: boolean) => {
     const before = progress[id];
-    const after = review(before, remembered, Date.now());
-    setProgress((p) => withReview(p, id, after));
-    return () => setProgress((p) => withReview(p, id, before));
+    const after = review(studied(before), remembered, Date.now());
+    const record = before?.suspended ? { ...after, suspended: true as const } : after;
+    setProgress((p) => withRecord(p, id, record));
+    return () => setProgress((p) => withRecord(p, id, before));
   };
 
-  return { progress, answer };
+  /** Suspend card `id`, or unsuspend it, and return a function that restores its previous record. */
+  const setSuspended = (id: number, suspended: boolean) => {
+    const before = progress[id];
+    setProgress((p) => withRecord(p, id, withSuspended(p[id], suspended)));
+    return () => setProgress((p) => withRecord(p, id, before));
+  };
+
+  return { progress, answer, setSuspended };
 }

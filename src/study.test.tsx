@@ -8,7 +8,14 @@ const card = { id: 7, arabic: "ثابِت", plain: "ثابت", english: "fixed, 
 function renderStudy(onAnswer = vi.fn(() => () => {})) {
   return render(
     <div style={{ width: 400, height: 700 }}>
-      <Study cards={[card]} dueCount={0} unstudiedCount={1} onAnswer={onAnswer} onExit={() => {}} />
+      <Study
+        cards={[card]}
+        dueCount={0}
+        unstudiedCount={1}
+        onAnswer={onAnswer}
+        onSuspend={() => () => {}}
+        onExit={() => {}}
+      />
     </div>,
   );
 }
@@ -133,6 +140,7 @@ describe("Study header", () => {
           dueCount={1}
           unstudiedCount={1}
           onAnswer={() => () => {}}
+          onSuspend={() => () => {}}
           onExit={() => {}}
         />
       </div>,
@@ -149,5 +157,77 @@ describe("Study header", () => {
     await answer();
     await expect.element(screen.getByText("Session complete")).toBeVisible();
     await expect.element(screen.getByText("Extra study (1 / 1)")).toBeVisible();
+  });
+});
+
+describe("Suspending while studying", () => {
+  const cards = [
+    { id: 1, arabic: "أَب", plain: "أب", english: "father" },
+    { id: 9, arabic: "تاج", plain: "تاج", english: "crown" },
+  ];
+
+  function renderSession(onSuspend = vi.fn(() => () => {})) {
+    return render(
+      <div style={{ width: 400, height: 700 }}>
+        <Study
+          cards={cards}
+          dueCount={2}
+          unstudiedCount={0}
+          onAnswer={() => () => {}}
+          onSuspend={onSuspend}
+          onExit={() => {}}
+        />
+      </div>,
+    );
+  }
+
+  it("offers the suspend button only on the back of the card", async () => {
+    const screen = await renderSession();
+    await expect.element(screen.getByRole("button", { name: "Suspend" })).not.toBeInTheDocument();
+    await screen.getByRole("button", { name: "Show answer" }).click();
+    await expect.element(screen.getByRole("button", { name: "Suspend" })).toBeVisible();
+  });
+
+  it("suspends the card, moves on, and says so in the top bar for a moment", async () => {
+    const onSuspend = vi.fn(() => () => {});
+    const screen = await renderSession(onSuspend);
+    await screen.getByRole("button", { name: "Show answer" }).click();
+    await screen.getByRole("button", { name: "Suspend" }).click();
+
+    await expect.element(screen.getByText("Card suspended")).toBeVisible();
+    expect(onSuspend).toHaveBeenCalledExactlyOnceWith(1);
+    await expect
+      .element(screen.getByRole("button", { name: cards[1].plain, exact: true }))
+      .toBeVisible();
+    // The count comes back after about two seconds.
+    await expect.element(screen.getByText("2 / 2 due"), { timeout: 3000 }).toBeVisible();
+    await expect.element(screen.getByText("Card suspended")).not.toBeInTheDocument();
+  });
+
+  it("brings the card back and unsuspends it on undo", async () => {
+    const revert = vi.fn();
+    const screen = await renderSession(vi.fn(() => revert));
+    await screen.getByRole("button", { name: "Show answer" }).click();
+    await screen.getByRole("button", { name: "Suspend" }).click();
+    await expect.element(screen.getByText("Card suspended")).toBeVisible();
+
+    await screen.getByRole("button", { name: "Undo" }).click();
+    expect(revert).toHaveBeenCalledOnce();
+    await expect
+      .element(screen.getByRole("button", { name: cards[0].plain, exact: true }))
+      .toBeVisible();
+    await expect.element(screen.getByText("1 / 2 due")).toBeVisible();
+  });
+
+  it("counts suspended cards at the end of the session", async () => {
+    const screen = await renderSession();
+    await screen.getByRole("button", { name: "Show answer" }).click();
+    await screen.getByRole("button", { name: "Suspend" }).click();
+    await expect.element(screen.getByText("Card suspended")).toBeVisible();
+    await screen.getByRole("button", { name: "Show answer" }).click();
+    await screen.getByRole("button", { name: /Remembered/ }).click();
+    await expect
+      .element(screen.getByText("1 remembered · 0 forgotten · 1 suspended"))
+      .toBeVisible();
   });
 });

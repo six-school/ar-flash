@@ -72,6 +72,17 @@ export const SpeakerIcon = ({ className }: { className?: string }) => (
     <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
   </svg>
 );
+export const PauseIcon = ({ className }: { className?: string }) => (
+  <svg {...icon} viewBox="0 0 24 24" className={className}>
+    <rect x="6" y="4" width="4" height="16" rx="1" />
+    <rect x="14" y="4" width="4" height="16" rx="1" />
+  </svg>
+);
+export const PlayIcon = ({ className }: { className?: string }) => (
+  <svg {...icon} viewBox="0 0 24 24" className={className}>
+    <path d="M7 4v16l13-8z" />
+  </svg>
+);
 const ChevronIcon = () => (
   <svg {...icon} viewBox="0 0 24 24" className="opacity-40">
     <path d="m9 18 6-6-6-6" />
@@ -114,9 +125,15 @@ export function stackStatus(dueTimes: number[], unstudied: number, now: number):
 
 /**
  * A card's status on its details screen: "Not studied yet", "Level 3 · due now" or
- * "Level 3 · due in 5 hours". `review` is undefined for a card not yet studied.
+ * "Level 3 · due in 5 hours"; for a suspended card, "Level 3 · suspended" or
+ * "Not studied yet · suspended". `review` is undefined for a card not yet studied.
  */
-export function cardStatus(review: { level: number; due: number } | undefined, now: number) {
+export function cardStatus(
+  review: { level: number; due: number } | undefined,
+  suspended: boolean,
+  now: number,
+) {
+  if (suspended) return `${review ? `Level ${review.level}` : "Not studied yet"} · suspended`;
   if (!review) return "Not studied yet";
   const when = review.due <= now ? "due now" : `due ${inTime(review.due, now)}`;
   return `Level ${review.level} · ${when}`;
@@ -186,8 +203,17 @@ export function Splash({
   );
 }
 
-/** The level column: a smaller, dimmed "new" for unstudied cards, red below 0, green above. */
-function Level({ level }: { level: number | null }) {
+/**
+ * The level column: a smaller, dimmed "new" for unstudied cards, red below 0, green above, and a
+ * dimmed pause icon for suspended cards.
+ */
+function Level({ level, suspended }: { level: number | null; suspended: boolean }) {
+  if (suspended)
+    return (
+      <span role="img" aria-label="suspended" className="flex w-10 shrink-0 justify-center">
+        <PauseIcon className="size-5 opacity-40" />
+      </span>
+    );
   const color =
     level === null
       ? "text-sm opacity-50"
@@ -218,7 +244,7 @@ export function StackScreen({
   onOpenCard,
 }: {
   title: string;
-  rows: { id: number; plain: string; level: number | null }[];
+  rows: { id: number; plain: string; level: number | null; suspended: boolean }[];
   initialScroll: number;
   revealId?: number;
   onScroll: (top: number) => void;
@@ -238,6 +264,7 @@ export function StackScreen({
     if (r.top < u.top || r.bottom > u.bottom)
       ul.scrollTop += r.top - u.top - (u.height - r.height) / 2;
   }, []);
+  const suspended = rows.filter((r) => r.suspended).length;
 
   return (
     <div className="flex h-full flex-col">
@@ -256,7 +283,9 @@ export function StackScreen({
         >
           Go!
         </button>
-        <p className="mt-4 text-center text-sm opacity-60">{rows.length} cards</p>
+        <p className="mt-4 text-center text-sm opacity-60">
+          {rows.length} cards{suspended > 0 && ` · ${suspended} suspended`}
+        </p>
       </div>
       <ul
         ref={list}
@@ -269,8 +298,12 @@ export function StackScreen({
               onClick={() => onOpenCard(r.id)}
               className="flex w-full cursor-pointer items-center gap-4 px-5 py-2 text-left hover:bg-neutral-500/10 active:bg-neutral-500/10"
             >
-              <Level level={r.level} />
-              <span lang="ar" dir="rtl" className="min-w-0 text-2xl break-words">
+              <Level level={r.level} suspended={r.suspended} />
+              <span
+                lang="ar"
+                dir="rtl"
+                className={`min-w-0 text-2xl break-words ${r.suspended ? "opacity-40" : ""}`}
+              >
                 {r.plain}
               </span>
             </button>

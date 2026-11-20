@@ -46,15 +46,21 @@ describe("stackStatus", () => {
 
 describe("cardStatus", () => {
   it("says a new card isn't studied yet", () => {
-    expect(cardStatus(undefined, now)).toBe("Not studied yet");
+    expect(cardStatus(undefined, false, now)).toBe("Not studied yet");
   });
 
   it("gives the level and says a due or overdue card is due now", () => {
-    expect(cardStatus({ level: 3, due: now }, now)).toBe("Level 3 · due now");
-    expect(cardStatus({ level: -1, due: now - DAY }, now)).toBe("Level -1 · due now");
+    expect(cardStatus({ level: 3, due: now }, false, now)).toBe("Level 3 · due now");
+    expect(cardStatus({ level: -1, due: now - DAY }, false, now)).toBe("Level -1 · due now");
   });
 
   it("gives the level and how soon a card not yet due is due", () => {
-    expect(cardStatus({ level: 4, due: now + 5 * HOUR }, now)).toBe("Level 4 · due in 5 hours");
+    const review = { level: 4, due: now + 5 * HOUR };
+    expect(cardStatus(review, false, now)).toBe("Level 4 · due in 5 hours");
+  });
+
+  it("says a card is suspended in place of when it's due", () => {
+    expect(cardStatus({ level: 3, due: now - DAY }, true, now)).toBe("Level 3 · suspended");
+    expect(cardStatus(undefined, true, now)).toBe("Not studied yet · suspended");
   });
 });

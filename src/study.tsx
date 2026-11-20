@@ -1,10 +1,20 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { animate, motion, useMotionValue, useTransform, type PanInfo } from "motion/react";
-import { Answer, FitText, Question, swipeDirection, useDragClickGuard } from "./card";
+import {
+  Answer,
+  FitText,
+  Question,
+  SuspendButton,
+  swipeDirection,
+  useDragClickGuard,
+} from "./card";
 import { BackIcon, IconButton, TopBar, UndoIcon } from "./screens";
 
 type Flashcard = { id: number; arabic: string; plain: string; english: string };
-type Outcome = "remembered" | "forgotten";
+type Outcome = "remembered" | "forgotten" | "suspended";
+
+// How long "Card suspended" shows in the top bar, in milliseconds.
+const NOTICE_TIME = 2000;
 
 /**
  * The study screen's header for the card at `index` (0-based) in a session whose first `due`
@@ -26,6 +36,7 @@ export function Study({
   dueCount,
   unstudiedCount,
   onAnswer,
+  onSuspend,
   onExit,
 }: {
   /** The session's cards: the due cards, then the new ones, then those not yet due. */
@@ -34,18 +45,31 @@ export function Study({
   unstudiedCount: number;
   /** Records an answer and returns a function that undoes it. */
   onAnswer: (id: number, remembered: boolean) => () => void;
+  /** Suspends a card and returns a function that undoes it. */
+  onSuspend: (id: number) => () => void;
   onExit: () => void;
 }) {
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
-  // history[i] is the answer to cards[i], with the function that undoes it.
+  // history[i] is what was done with cards[i], with the function that undoes it.
   const [history, setHistory] = useState<{ outcome: Outcome; revert: () => void }[]>([]);
+  // The index of the card that came up after a suspension, while "Card suspended" shows for it.
+  const [noticeAt, setNoticeAt] = useState<number | null>(null);
 
+  useEffect(() => {
+    if (noticeAt === null) return undefined;
+    const timer = setTimeout(() => setNoticeAt(null), NOTICE_TIME);
+    return () => clearTimeout(timer);
+  }, [noticeAt]);
+
+  // Suspending works like answering: the card leaves the session, and undo brings it back.
   const mark = (outcome: Outcome) => {
-    const revert = onAnswer(cards[index].id, outcome === "remembered");
+    const id = cards[index].id;
+    const revert = outcome === "suspended" ? onSuspend(id) : onAnswer(id, outcome === "remembered");
     setHistory((h) => [...h, { outcome, revert }]);
     setIndex((i) => i + 1);
     setRevealed(false);
+    if (outcome === "suspended") setNoticeAt(index + 1);
   };
 
   const undo = () => {
@@ -68,15 +92,21 @@ export function Study({
           </IconButton>
         }
         center={
-          cards.length > 0 && (
-            <span className="text-sm font-normal tabular-nums opacity-60">
-              {/* After the last card, it keeps the last card's header. */}
-              {sessionHeader(Math.min(index, cards.length - 1), {
-                due: dueCount,
-                unstudied: unstudiedCount,
-                total: cards.length,
-              })}
+          noticeAt === index ? (
+            <span role="status" className="text-sm font-normal opacity-60">
+              Card suspended
             </span>
+          ) : (
+            cards.length > 0 && (
+              <span className="text-sm font-normal tabular-nums opacity-60">
+                {/* After the last card, it keeps the last card's header. */}
+                {sessionHeader(Math.min(index, cards.length - 1), {
+                  due: dueCount,
+                  unstudied: unstudiedCount,
+                  total: cards.length,
+                })}
+              </span>
+            )
           )
         }
         right={
@@ -90,6 +120,7 @@ export function Study({
           <p className="text-3xl font-bold">Session complete</p>
           <p className="opacity-60">
             {count("remembered")} remembered · {count("forgotten")} forgotten
+            {count("suspended") > 0 && ` · ${count("suspended")} suspended`}
           </p>
           <button
             onClick={onExit}
@@ -133,6 +164,7 @@ function Card({
 }) {
   const [vowels, setVowels] = useState(false);
   const x = useMotionValue(0);
+  const y = useMotionValue(0);
   const rotate = useTransform(x, [-300, 300], [-10, 10]);
   const underlay = useTransform(
     x,
@@ -144,16 +176,13 @@ function Card({
   const leaving = useRef(false);
   const guard = useDragClickGuard();
 
-  // Fly the card off in the swipe direction, then record the result.
+  // Fly the card off, sideways for an answer and upwards for a suspension, then record the result.
   const commit = (outcome: Outcome) => {
     if (leaving.current) return;
     leaving.current = true;
-    const dir = outcome === "remembered" ? 1 : -1;
-    animate(x, dir * window.innerWidth * 1.2, {
-      duration: 0.25,
-      ease: "easeIn",
-      onComplete: () => onMark(outcome),
-    });
+    const fly = { duration: 0.25, ease: "easeIn", onComplete: () => onMark(outcome) } as const;
+    if (outcome === "suspended") animate(y, -window.innerHeight, fly);
+    else animate(x, (outcome === "remembered" ? 1 : -1) * window.innerWidth * 1.2, fly);
   };
 
   const onDragEnd = (_: unknown, info: PanInfo) => {
@@ -210,7 +239,7 @@ function Card({
         <motion.div
           data-testid="card"
           className="relative h-full cursor-pointer select-none"
-          style={{ x, rotate }}
+          style={{ x, y, rotate }}
           drag={revealed ? "x" : false}
           dragMomentum={false}
           {...guard}
@@ -229,7 +258,11 @@ function Card({
             <Face shown={!revealed}>
               <Question card={card} vowels={vowels} onToggleVowels={toggleVowels} />
             </Face>
-            <Face back shown={revealed}>
+            <Face
+              back
+              shown={revealed}
+              top={<SuspendButton suspended={false} onClick={() => commit("suspended")} />}
+            >
               <Answer card={card} vowels={vowels} onToggleVowels={toggleVowels} />
             </Face>
           </motion.div>
@@ -264,8 +297,21 @@ function Card({
   );
 }
 
-/** The face that isn't showing is inert and hidden, so its buttons can't be reached. */
-function Face({ back, shown, children }: { back?: boolean; shown: boolean; children: ReactNode }) {
+/**
+ * The face that isn't showing is inert and hidden, so its buttons can't be reached. `top` is a
+ * button for the top of the face.
+ */
+function Face({
+  back,
+  shown,
+  top,
+  children,
+}: {
+  back?: boolean;
+  shown: boolean;
+  top?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <div
       aria-hidden={!shown}
@@ -277,7 +323,8 @@ function Face({ back, shown, children }: { back?: boolean; shown: boolean; child
         transform: back ? "rotateY(180deg)" : undefined,
       }}
     >
-      <FitText>{children}</FitText>
+      <FitText roomAbove={top !== undefined}>{children}</FitText>
+      {top}
     </div>
   );
 }
