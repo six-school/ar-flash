@@ -235,6 +235,9 @@
     {"id": 323, "arabic": "تَـ…ـون", "plain": "تـ…ـون", "english": "You (m. pl.), present tense, form 1"},
     {"id": 324, "arabic": "تَـ…ـنَ", "plain": "تـ…ـن", "english": "You (f. pl.), present tense, form 1"},
     {"id": 325, "arabic": "يَـ…ـون", "plain": "يـ…ـون", "english": "They (m.), present tense, form 1"},
-    {"id": 326, "arabic": "يَـ…ـنَ", "plain": "يـ…ـن", "english": "They (f.), present tense, form 1"}
+    {"id": 326, "arabic": "يَـ…ـنَ", "plain": "يـ…ـن", "english": "They (f.), present tense, form 1"},
+    {"id": 327, "arabic": "بَلَد", "plain": "بلد", "english": "Country"},
+    {"id": 328, "arabic": "جَدّ / جَدَّة", "plain": "جدّ / جدّة", "english": "Grandfather / grandmother"},
+    {"id": 329, "arabic": "يَتَذَكَّر / تَتَذَكَّر", "plain": "يتذكر / تتذكر", "english": "He remembers / she remembers"}
   ]
 }
