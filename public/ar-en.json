@@ -238,6 +238,20 @@
     {"id": 326, "arabic": "يَـ…ـنَ", "plain": "يـ…ـن", "english": "They (f.), present tense, form 1"},
     {"id": 327, "arabic": "بَلَد", "plain": "بلد", "english": "Country"},
     {"id": 328, "arabic": "جَدّ / جَدَّة", "plain": "جدّ / جدّة", "english": "Grandfather / grandmother"},
-    {"id": 329, "arabic": "يَتَذَكَّر / تَتَذَكَّر", "plain": "يتذكر / تتذكر", "english": "He remembers / she remembers"}
+    {"id": 329, "arabic": "يَتَذَكَّر / تَتَذَكَّر", "plain": "يتذكر / تتذكر", "english": "He remembers / she remembers"},
+    {"id": 330, "arabic": "أَعْمام", "plain": "أعمام", "english": "Uncles (father’s brothers)"},
+    {"id": 331, "arabic": "جِيران", "plain": "جيران", "english": "Neighbors"},
+    {"id": 332, "arabic": "كُتُب", "plain": "كتُب", "english": "Books"},
+    {"id": 333, "arabic": "أَبْواب", "plain": "أبواب", "english": "Doors"},
+    {"id": 334, "arabic": "طُلّاب", "plain": "طلاب", "english": "Students"},
+    {"id": 335, "arabic": "إِخْوَة", "plain": "إخوة", "english": "Brothers"},
+    {"id": 336, "arabic": "أُسَر", "plain": "أُسر", "english": "Families (households)"},
+    {"id": 337, "arabic": "زَميل / زُمَلاء", "plain": "زميل / زملاء", "english": "Colleague / colleagues"},
+    {"id": 338, "arabic": "صَديق / أَصْدِقاء", "plain": "صديق / أصدقاء", "english": "Friend / friends"},
+    {"id": 339, "arabic": "رَجُل / رِجال", "plain": "رجُل / رجال", "english": "Man / men"},
+    {"id": 340, "arabic": "خال / أَخْوال", "plain": "خال / أخوال", "english": "Maternal uncle / maternal uncles"},
+    {"id": 341, "arabic": "غُرْفَة / غُرَف", "plain": "غرفة / غرف", "english": "Room / rooms"},
+    {"id": 342, "arabic": "مَدينَة / مُدُن", "plain": "مدينة / مدن", "english": "City / cities"},
+    {"id": 343, "arabic": "جُمْلَة / جُمَل", "plain": "جملة / جُمل", "english": "Sentence / sentences"}
   ]
 }
