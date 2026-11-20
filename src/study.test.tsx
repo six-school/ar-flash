@@ -199,7 +199,7 @@ describe("Suspending while studying", () => {
     await expect
       .element(screen.getByRole("button", { name: cards[1].plain, exact: true }))
       .toBeVisible();
-    // The count comes back after about two seconds.
+    // The counts come back after a second and a half, once the notice has faded out.
     await expect.element(screen.getByText("2 / 2 due"), { timeout: 3000 }).toBeVisible();
     await expect.element(screen.getByText("Card suspended")).not.toBeInTheDocument();
   });

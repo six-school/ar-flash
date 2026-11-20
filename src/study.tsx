@@ -1,5 +1,12 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { animate, motion, useMotionValue, useTransform, type PanInfo } from "motion/react";
+import {
+  AnimatePresence,
+  animate,
+  motion,
+  useMotionValue,
+  useTransform,
+  type PanInfo,
+} from "motion/react";
 import {
   Answer,
   FitText,
@@ -13,8 +20,10 @@ import { BackIcon, IconButton, TopBar, UndoIcon } from "./screens";
 type Flashcard = { id: number; arabic: string; plain: string; english: string };
 type Outcome = "remembered" | "forgotten" | "suspended";
 
-// How long "Card suspended" shows in the top bar, in milliseconds.
-const NOTICE_TIME = 2000;
+// How long "Card suspended" shows in the top bar, in milliseconds, before it fades out and the
+// counts fade back in, each taking FADE seconds.
+const NOTICE_TIME = 1500;
+const FADE = 0.3;
 
 /**
  * The study screen's header for the card at `index` (0-based) in a session whose first `due`
@@ -92,22 +101,39 @@ export function Study({
           </IconButton>
         }
         center={
-          noticeAt === index ? (
-            <span role="status" className="text-sm font-normal opacity-60">
-              Card suspended
-            </span>
-          ) : (
-            cards.length > 0 && (
-              <span className="text-sm font-normal tabular-nums opacity-60">
-                {/* After the last card, it keeps the last card's header. */}
-                {sessionHeader(Math.min(index, cards.length - 1), {
-                  due: dueCount,
-                  unstudied: unstudiedCount,
-                  total: cards.length,
-                })}
-              </span>
-            )
-          )
+          // The notice replaces the counts at once, and is brighter than them. When it ends, it
+          // fades out before the counts fade in.
+          <AnimatePresence mode="wait" initial={false}>
+            {noticeAt === index ? (
+              <motion.span
+                key="notice"
+                role="status"
+                className="text-sm font-normal"
+                initial={false}
+                animate={{ opacity: 0.9 }}
+                exit={{ opacity: 0, transition: { duration: FADE } }}
+              >
+                Card suspended
+              </motion.span>
+            ) : (
+              cards.length > 0 && (
+                <motion.span
+                  key="counts"
+                  className="text-sm font-normal tabular-nums"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 0.6 }}
+                  transition={{ duration: FADE }}
+                >
+                  {/* After the last card, it keeps the last card's header. */}
+                  {sessionHeader(Math.min(index, cards.length - 1), {
+                    due: dueCount,
+                    unstudied: unstudiedCount,
+                    total: cards.length,
+                  })}
+                </motion.span>
+              )
+            )}
+          </AnimatePresence>
         }
         right={
           <IconButton label="Undo" onClick={undo} disabled={index === 0}>
