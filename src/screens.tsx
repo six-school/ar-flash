@@ -229,9 +229,8 @@ function Level({ level, suspended }: { level: number | null; suspended: boolean 
 
 /**
  * `rows` are in list order; `level` is null for a card not yet studied. The card list opens
- * scrolled to `initialScroll` and reports its scroll position through `onScroll`, so it can come
- * back to the same place after cards' details. If the row for `revealId` is then out of view, the
- * list scrolls to centre it.
+ * scrolled to `initialScroll` and reports its scroll position through `onScroll`. If the row for
+ * `revealId` is then out of view, the list scrolls to centre it.
  */
 export function StackScreen({
   title,

@@ -36,10 +36,16 @@ export function pausal(text: string): string {
     );
 }
 
-/** Speak `text` in Arabic, in pausal form, cutting off anything still being spoken. */
-export function speak(text: string) {
+/**
+ * Speak `text` in Arabic, in pausal form, cutting off anything still being spoken. Calls `onEnd`
+ * when the speech ends, fails or is cut off. Returns the utterance.
+ */
+export function speak(text: string, onEnd: () => void) {
   const utterance = new SpeechSynthesisUtterance(pausal(text));
   utterance.lang = "ar";
+  utterance.addEventListener("end", onEnd);
+  utterance.addEventListener("error", onEnd);
   speechSynthesis.cancel();
   speechSynthesis.speak(utterance);
+  return utterance;
 }

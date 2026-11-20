@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { CardDetails } from "./card";
@@ -67,6 +67,32 @@ function centre(el: Element) {
   const r = el.getBoundingClientRect();
   return r.left + r.width / 2;
 }
+
+/**
+ * Taps the speaker button with a DOM click, after moving the pointer to the top bar, so a hover
+ * doesn't light the button up. Returns the button.
+ */
+async function tapSpeaker(screen: Awaited<ReturnType<typeof renderDetails>>) {
+  await userEvent.hover(screen.getByText("Not studied yet"));
+  const button = screen.getByRole("button", { name: "Speak" }).element();
+  button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  return button;
+}
+
+/** Whether the speaker button is lit. */
+function isLit(button: Element) {
+  return getComputedStyle(button).opacity === "1";
+}
+
+/** Stubs out speech; returns the utterances spoken so far. */
+function stubSpeech() {
+  const speak = vi.spyOn(speechSynthesis, "speak").mockImplementation(() => {});
+  return () => speak.mock.calls.map(([utterance]) => utterance);
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 /** Shows `cards` on the details screen, moving through them as CardDetails asks. */
 function Browser() {
@@ -167,6 +193,35 @@ describe("CardDetails", () => {
         () => shown.getBoundingClientRect().height / parseFloat(getComputedStyle(shown).lineHeight),
       )
       .toBeLessThan(1.5);
+  });
+
+  it("lights the speaker button from a tap until the speech ends", async () => {
+    const utterances = stubSpeech();
+    const screen = await renderDetails();
+    const button = await tapSpeaker(screen);
+    await expect.poll(() => isLit(button)).toBe(true);
+
+    const [utterance] = utterances();
+    utterance.dispatchEvent(new Event("start"));
+    utterance.dispatchEvent(new Event("end"));
+    await expect.poll(() => isLit(button)).toBe(false);
+  });
+
+  it("keeps the speaker button lit when a second tap cuts off the first speech", async () => {
+    const utterances = stubSpeech();
+    const screen = await renderDetails();
+    await tapSpeaker(screen);
+    const button = await tapSpeaker(screen);
+    const [first, second] = utterances();
+
+    // Cutting the first speech off ends it with an error, before the second has started.
+    first.dispatchEvent(new Event("error"));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(isLit(button)).toBe(true);
+
+    second.dispatchEvent(new Event("start"));
+    second.dispatchEvent(new Event("end"));
+    await expect.poll(() => isLit(button)).toBe(false);
   });
 
   it("goes back from the back button", async () => {

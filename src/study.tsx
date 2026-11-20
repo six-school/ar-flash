@@ -157,6 +157,7 @@ export function Study({
         </div>
       ) : (
         <Card
+          // Keyed by position, so each new card mounts fresh: unflipped, centred and unvowelled.
           key={index}
           card={cards[index]}
           revealed={revealed}
@@ -174,8 +175,8 @@ const GREEN = "rgb(22, 163, 74)";
 const SWIPE_DISTANCE = 100;
 
 /**
- * One card. Keyed by position, so each new card mounts fresh: unflipped, centred and unvowelled.
- * The vowel toggle belongs to the card, so vowels shown on the front stay shown after the flip.
+ * One card. The vowel toggle belongs to the card, so vowels shown on the front stay shown after the
+ * flip.
  */
 function Card({
   card,

@@ -87,14 +87,28 @@ describe("Study card", () => {
     expect(onAnswer).not.toHaveBeenCalled();
   });
 
-  it("keeps the Arabic word centred on the back, beside the speaker button", async () => {
+  it("puts the speaker button on the back between the Arabic word and the English, centred", async () => {
     const screen = await renderStudy();
     await screen.getByRole("button", { name: "Show answer" }).click();
-    await expect.element(screen.getByRole("button", { name: "Speak" })).toBeVisible();
     const word = screen.getByRole("button", { name: card.plain, exact: true });
-    const offset = () => centre(word.element()) - centre(screen.getByTestId("card").element());
+    const speaker = screen.getByRole("button", { name: "Speak" });
+    const english = screen.getByText(card.english);
+    await expect.element(speaker).toBeVisible();
+    const layout = () => {
+      const s = speaker.element().getBoundingClientRect();
+      return {
+        belowWord: s.top >= word.element().getBoundingClientRect().bottom,
+        aboveEnglish: s.bottom <= english.element().getBoundingClientRect().top,
+        centred:
+          Math.abs(centre(speaker.element()) - centre(screen.getByTestId("card").element())) < 1,
+      };
+    };
     // Polled, because the card is still turning over just after the flip.
-    await expect.poll(() => Math.abs(offset())).toBeLessThan(1);
+    await expect.poll(layout).toEqual({
+      belowWord: true,
+      aboveEnglish: true,
+      centred: true,
+    });
   });
 });
 

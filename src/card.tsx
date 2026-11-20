@@ -45,11 +45,11 @@ export function useDragClickGuard() {
 }
 
 /**
- * One card's details, opened from the stack's card list: its answer side, with a button on it that
- * suspends or unsuspends the card, and its level and when it's due in the top bar. `review` is
- * undefined for a card not yet studied. Swiping left, or the right arrow key, shows the next card
- * in the list, and swiping right, or the left arrow key, the previous one. `onNext` and
- * `onPrevious` are undefined at the ends of the list.
+ * One card's details: its answer side, with a button on it that suspends or unsuspends the card,
+ * and its level and when it's due in the top bar. `review` is undefined for a card not yet studied.
+ * Swiping left, or the right arrow key, shows the next card in the list, and swiping right, or the
+ * left arrow key, the previous one. `onNext` and `onPrevious` are undefined at the ends of the
+ * list.
  */
 export function CardDetails({
   card,
@@ -113,6 +113,7 @@ export function CardDetails({
       <div className="relative mx-4 mb-[max(1rem,env(safe-area-inset-bottom))] flex-1">
         <AnimatePresence initial={false} custom={dir}>
           <SlidingCard
+            // Keyed by card, so each card mounts fresh and unvowelled.
             key={card.id}
             card={card}
             dir={dir}
@@ -136,8 +137,7 @@ const slide = {
 
 /**
  * A card on the details screen. It follows a horizontal drag; a swipe left asks for the next card
- * and a swipe right for the previous one, and it springs back if there's none. Keyed by card, so
- * each card mounts fresh and unvowelled.
+ * and a swipe right for the previous one, and it springs back if there's none.
  */
 function SlidingCard({
   card,
@@ -201,7 +201,7 @@ export function Question({
   );
 }
 
-/** A card's answer side: the Arabic word with a speaker button beside it, then the English. */
+/** A card's answer side: the Arabic word with a speaker button below it, then the English. */
 export function Answer({
   card,
   vowels,
@@ -214,15 +214,14 @@ export function Answer({
   return (
     <>
       <ArabicLine>
-        {canSpeak && <SpeakerSpace />}
         <ArabicWord
           plain={card.plain}
           arabic={card.arabic}
           vowels={vowels}
           onToggle={onToggleVowels}
         />
-        {canSpeak && <SpeakButton text={card.arabic} />}
       </ArabicLine>
+      {canSpeak && <SpeakButton text={card.arabic} />}
       <Line>{card.english}</Line>
     </>
   );
@@ -271,20 +270,8 @@ function ArabicWord({
   );
 }
 
-// Without speech synthesis, the speaker button and the space that balances it are left out.
+// Without speech synthesis, the speaker button is left out.
 const canSpeak = typeof speechSynthesis !== "undefined";
-// The speaker button's box and icon. A blank box of the same size sits on the word's other side,
-// so the word stays centred on the card.
-const SPEAKER_BOX = "shrink-0 p-2";
-const SPEAKER_ICON = "size-[clamp(1.5rem,0.5em,2.5rem)]";
-
-function SpeakerSpace() {
-  return (
-    <span aria-hidden className={`invisible ${SPEAKER_BOX}`}>
-      <SpeakerIcon className={SPEAKER_ICON} />
-    </span>
-  );
-}
 
 /**
  * A ref for a button on a swipeable card. The card starts a swipe from a native pointerdown on
@@ -305,6 +292,10 @@ function useNoSwipe() {
 /** Speaks `text` in Arabic. */
 function SpeakButton({ text }: { text: string }) {
   const ref = useNoSwipe();
+  const [speaking, setSpeaking] = useState(false);
+  // The utterance from the latest tap. Events from one that a later tap cut off are ignored, and
+  // holding it here keeps Chrome from garbage-collecting it before its end event fires.
+  const utterance = useRef<SpeechSynthesisUtterance>(null);
   return (
     <button
       ref={ref}
@@ -314,18 +305,22 @@ function SpeakButton({ text }: { text: string }) {
       onClick={(e) => {
         e.stopPropagation();
         e.currentTarget.blur();
-        speak(text);
+        setSpeaking(true);
+        const tapped = speak(text, () => {
+          if (utterance.current === tapped) setSpeaking(false);
+        });
+        utterance.current = tapped;
       }}
-      className={`${SPEAKER_BOX} cursor-pointer rounded-full opacity-60 hover:bg-neutral-500/15 hover:opacity-100`}
+      className={`shrink-0 cursor-pointer self-center rounded-full p-2 ${speaking ? "bg-neutral-500/15" : "opacity-60 hover:bg-neutral-500/15 hover:opacity-100"}`}
     >
-      <SpeakerIcon className={SPEAKER_ICON} />
+      {/* Half the size of the Arabic line's text, which is 1.5em, within bounds. */}
+      <SpeakerIcon className="size-[clamp(1.5rem,0.75em,2.5rem)]" />
     </button>
   );
 }
 
 /**
  * The button at the top centre of a card's answer side that suspends the card, or unsuspends it.
- * It goes inside the card, after a FitText with `roomAbove`.
  */
 export function SuspendButton({ suspended, onClick }: { suspended: boolean; onClick: () => void }) {
   const ref = useNoSwipe();
@@ -348,13 +343,9 @@ export function SuspendButton({ suspended, onClick }: { suspended: boolean; onCl
   );
 }
 
-/** The Arabic line: larger than the English, centred, with anything after the word to its right. */
+/** The Arabic line: larger than the English, and centred. */
 function ArabicLine({ children }: { children: ReactNode }) {
-  return (
-    <p className="my-[0.2em] flex items-center justify-center gap-[0.15em] text-[1.5em]">
-      {children}
-    </p>
-  );
+  return <p className="my-[0.2em] flex items-center justify-center text-[1.5em]">{children}</p>;
 }
 
 /**
@@ -376,7 +367,7 @@ function Line({ children }: { children: string }) {
 
 /**
  * Sets the largest font size at which the content still fits its box, and refits on resize.
- * `roomAbove` leaves space at the top for a SuspendButton.
+ * `roomAbove` leaves extra space at the top.
  */
 export function FitText({ children, roomAbove }: { children: ReactNode; roomAbove?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);

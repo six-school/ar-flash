@@ -4,6 +4,8 @@ import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { playwright } from "@vitest/browser-playwright";
 
+declare const process: { env: Record<string, string | undefined> };
+
 export default defineConfig({
   base: "./",
   plugins: [
@@ -52,7 +54,11 @@ export default defineConfig({
           include: ["src/**/*.test.tsx"],
           browser: {
             enabled: true,
-            provider: playwright(),
+            provider: playwright({
+              launchOptions: {
+                executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+              },
+            }),
             headless: true,
             instances: [{ browser: "chromium" }],
           },
