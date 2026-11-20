@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { pausal } from "./speech";
+import { pausal, tanwinBeforeAlif } from "./speech";
+
+describe("tanwinBeforeAlif", () => {
+  it("moves a tanwin fath from after an alif onto the letter before it", () => {
+    expect(tanwinBeforeAlif("دائِماً")).toBe("دائِمًا");
+    expect(tanwinBeforeAlif("أَهلاً بكَ")).toBe("أَهلًا بكَ");
+  });
+
+  it("leaves a tanwin fath that isn't after an alif", () => {
+    for (const word of ["شُكرًا", "ساعَةً"]) {
+      expect(tanwinBeforeAlif(word)).toBe(word);
+    }
+  });
+});
 
 describe("pausal", () => {
   it("puts a sukun on a final consonant with no vowel", () => {
