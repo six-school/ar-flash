@@ -19,6 +19,8 @@ import { BackIcon, IconButton, TopBar, UndoIcon } from "./screens";
 
 type Flashcard = { id: number; arabic: string; plain: string; english: string };
 type Outcome = "remembered" | "forgotten" | "suspended";
+/** What was done with a card, and the card's record from before, which undo puts back. */
+type Step = { outcome: Outcome; before: unknown };
 
 // How long "Card suspended" shows in the top bar, in milliseconds, before it fades out and the
 // counts fade back in, each taking FADE seconds.
@@ -40,28 +42,41 @@ export function sessionHeader(
   return `Extra study (${index - due - unstudied + 1} / ${total - due - unstudied})`;
 }
 
+/**
+ * A study session. It shows the card after the last step, or the summary once every card has had a
+ * step or the session has `ended` early.
+ */
 export function Study({
   cards,
   dueCount,
   unstudiedCount,
+  steps,
+  ended,
+  onSteps,
   onAnswer,
   onSuspend,
+  onRestore,
   onExit,
 }: {
   /** The session's cards: the due cards, then the new ones, then those not yet due. */
   cards: Flashcard[];
   dueCount: number;
   unstudiedCount: number;
-  /** Records an answer and returns a function that undoes it. */
-  onAnswer: (id: number, remembered: boolean) => () => void;
-  /** Suspends a card and returns a function that undoes it. */
-  onSuspend: (id: number) => () => void;
+  /** steps[i] is what was done with cards[i]. */
+  steps: Step[];
+  ended: boolean;
+  /** Takes the steps after an answer, a suspension or an undo. */
+  onSteps: (steps: Step[]) => void;
+  /** Records an answer and returns the card's record from before. */
+  onAnswer: (id: number, remembered: boolean) => unknown;
+  /** Suspends a card and returns its record from before. */
+  onSuspend: (id: number) => unknown;
+  /** Puts back a card's record from before. */
+  onRestore: (id: number, before: unknown) => void;
   onExit: () => void;
 }) {
-  const [index, setIndex] = useState(0);
+  const index = steps.length;
   const [revealed, setRevealed] = useState(false);
-  // history[i] is what was done with cards[i], with the function that undoes it.
-  const [history, setHistory] = useState<{ outcome: Outcome; revert: () => void }[]>([]);
   // The index of the card that came up after a suspension, while "Card suspended" shows for it.
   const [noticeAt, setNoticeAt] = useState<number | null>(null);
 
@@ -74,23 +89,21 @@ export function Study({
   // Suspending works like answering: the card leaves the session, and undo brings it back.
   const mark = (outcome: Outcome) => {
     const id = cards[index].id;
-    const revert = outcome === "suspended" ? onSuspend(id) : onAnswer(id, outcome === "remembered");
-    setHistory((h) => [...h, { outcome, revert }]);
-    setIndex((i) => i + 1);
+    const before = outcome === "suspended" ? onSuspend(id) : onAnswer(id, outcome === "remembered");
+    onSteps([...steps, { outcome, before }]);
     setRevealed(false);
     if (outcome === "suspended") setNoticeAt(index + 1);
   };
 
   const undo = () => {
     if (index === 0) return;
-    history[history.length - 1].revert();
-    setHistory((h) => h.slice(0, -1));
-    setIndex((i) => i - 1);
+    onRestore(cards[index - 1].id, steps[index - 1].before);
+    onSteps(steps.slice(0, -1));
     setRevealed(false);
   };
 
-  const done = index >= cards.length;
-  const count = (o: Outcome) => history.filter((h) => h.outcome === o).length;
+  const summary = ended || index >= cards.length;
+  const count = (o: Outcome) => steps.filter((s) => s.outcome === o).length;
 
   return (
     <div className="flex h-full flex-col">
@@ -124,8 +137,8 @@ export function Study({
                   animate={{ opacity: 0.6 }}
                   transition={{ duration: FADE }}
                 >
-                  {/* After the last card, it keeps the last card's header. */}
-                  {sessionHeader(Math.min(index, cards.length - 1), {
+                  {/* On the summary, it keeps the last card's header. */}
+                  {sessionHeader(summary ? index - 1 : index, {
                     due: dueCount,
                     unstudied: unstudiedCount,
                     total: cards.length,
@@ -141,9 +154,9 @@ export function Study({
           </IconButton>
         }
       />
-      {done ? (
+      {summary ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
-          <p className="text-3xl font-bold">Session complete</p>
+          <p className="text-3xl font-bold">{ended ? "Session ended" : "Session complete"}</p>
           <p className="opacity-60">
             {count("remembered")} remembered · {count("forgotten")} forgotten
             {count("suspended") > 0 && ` · ${count("suspended")} suspended`}

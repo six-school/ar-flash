@@ -1,23 +1,65 @@
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 import { Study, sessionHeader } from "./study";
 import "./index.css";
 
+type Flashcard = { id: number; arabic: string; plain: string; english: string };
+type Step = { outcome: "remembered" | "forgotten" | "suspended"; before: unknown };
+type SessionOptions = {
+  dueCount?: number;
+  unstudiedCount?: number;
+  steps?: Step[];
+  ended?: boolean;
+  onAnswer?: (id: number, remembered: boolean) => unknown;
+  onSuspend?: (id: number) => unknown;
+  onRestore?: (id: number, before: unknown) => void;
+};
+
 const card = { id: 7, arabic: "ثابِت", plain: "ثابت", english: "fixed, stable" };
 
-function renderStudy(onAnswer = vi.fn(() => () => {})) {
-  return render(
-    <div style={{ width: 400, height: 700 }}>
+/**
+ * Renders a study session that keeps its steps in state, as the app does, and starts after `steps`,
+ * on the summary if `ended`.
+ */
+function renderSession(
+  cards: Flashcard[],
+  {
+    dueCount = 0,
+    unstudiedCount = cards.length,
+    steps = [],
+    ended = false,
+    onAnswer = () => undefined,
+    onSuspend = () => undefined,
+    onRestore = () => {},
+  }: SessionOptions = {},
+) {
+  function Session() {
+    const [state, setState] = useState({ steps, ended });
+    return (
       <Study
-        cards={[card]}
-        dueCount={0}
-        unstudiedCount={1}
+        cards={cards}
+        dueCount={dueCount}
+        unstudiedCount={unstudiedCount}
+        steps={state.steps}
+        ended={state.ended}
+        onSteps={(next) => setState({ steps: next, ended: false })}
         onAnswer={onAnswer}
-        onSuspend={() => () => {}}
+        onSuspend={onSuspend}
+        onRestore={onRestore}
         onExit={() => {}}
       />
+    );
+  }
+  return render(
+    <div style={{ width: 400, height: 700 }}>
+      <Session />
     </div>,
   );
+}
+
+function renderStudy(onAnswer?: (id: number, remembered: boolean) => unknown) {
+  return renderSession([card], { onAnswer });
 }
 
 function centre(el: Element) {
@@ -67,7 +109,7 @@ describe("Study card", () => {
 
   it("speaks the vowelled form in Arabic, in pausal form, from the speaker button, without flipping or answering", async () => {
     const speak = vi.spyOn(speechSynthesis, "speak").mockImplementation(() => {});
-    const onAnswer = vi.fn(() => () => {});
+    const onAnswer = vi.fn<(id: number, remembered: boolean) => unknown>();
     const screen = await renderStudy(onAnswer);
     await screen.getByRole("button", { name: "Show answer" }).click();
     // The word shows the plain form, but the speaker always speaks the vowelled one, with a
@@ -147,18 +189,7 @@ describe("Study header", () => {
       card,
       { id: 9, arabic: "تاج", plain: "تاج", english: "crown" },
     ];
-    const screen = await render(
-      <div style={{ width: 400, height: 700 }}>
-        <Study
-          cards={cards}
-          dueCount={1}
-          unstudiedCount={1}
-          onAnswer={() => () => {}}
-          onSuspend={() => () => {}}
-          onExit={() => {}}
-        />
-      </div>,
-    );
+    const screen = await renderSession(cards, { dueCount: 1, unstudiedCount: 1 });
     const answer = async () => {
       await screen.getByRole("button", { name: "Show answer" }).click();
       await screen.getByRole("button", { name: /Remembered/ }).click();
@@ -180,31 +211,19 @@ describe("Suspending while studying", () => {
     { id: 9, arabic: "تاج", plain: "تاج", english: "crown" },
   ];
 
-  function renderSession(onSuspend = vi.fn(() => () => {})) {
-    return render(
-      <div style={{ width: 400, height: 700 }}>
-        <Study
-          cards={cards}
-          dueCount={2}
-          unstudiedCount={0}
-          onAnswer={() => () => {}}
-          onSuspend={onSuspend}
-          onExit={() => {}}
-        />
-      </div>,
-    );
-  }
+  const renderSuspending = (options: SessionOptions = {}) =>
+    renderSession(cards, { dueCount: 2, unstudiedCount: 0, ...options });
 
   it("offers the suspend button only on the back of the card", async () => {
-    const screen = await renderSession();
+    const screen = await renderSuspending();
     await expect.element(screen.getByRole("button", { name: "Suspend" })).not.toBeInTheDocument();
     await screen.getByRole("button", { name: "Show answer" }).click();
     await expect.element(screen.getByRole("button", { name: "Suspend" })).toBeVisible();
   });
 
   it("suspends the card, moves on, and says so in the top bar for a moment", async () => {
-    const onSuspend = vi.fn(() => () => {});
-    const screen = await renderSession(onSuspend);
+    const onSuspend = vi.fn<(id: number) => unknown>();
+    const screen = await renderSuspending({ onSuspend });
     await screen.getByRole("button", { name: "Show answer" }).click();
     await screen.getByRole("button", { name: "Suspend" }).click();
 
@@ -218,15 +237,16 @@ describe("Suspending while studying", () => {
     await expect.element(screen.getByText("Card suspended")).not.toBeInTheDocument();
   });
 
-  it("brings the card back and unsuspends it on undo", async () => {
-    const revert = vi.fn();
-    const screen = await renderSession(vi.fn(() => revert));
+  it("brings the card back and puts back its record from before on undo", async () => {
+    const before = { level: 2, reviewedAt: "2026-11-19T21:00:00.000Z" };
+    const onRestore = vi.fn<(id: number, before: unknown) => void>();
+    const screen = await renderSuspending({ onSuspend: () => before, onRestore });
     await screen.getByRole("button", { name: "Show answer" }).click();
     await screen.getByRole("button", { name: "Suspend" }).click();
     await expect.element(screen.getByText("Card suspended")).toBeVisible();
 
     await screen.getByRole("button", { name: "Undo" }).click();
-    expect(revert).toHaveBeenCalledOnce();
+    expect(onRestore).toHaveBeenCalledExactlyOnceWith(1, before);
     await expect
       .element(screen.getByRole("button", { name: cards[0].plain, exact: true }))
       .toBeVisible();
@@ -234,7 +254,7 @@ describe("Suspending while studying", () => {
   });
 
   it("counts suspended cards at the end of the session", async () => {
-    const screen = await renderSession();
+    const screen = await renderSuspending();
     await screen.getByRole("button", { name: "Show answer" }).click();
     await screen.getByRole("button", { name: "Suspend" }).click();
     await expect.element(screen.getByText("Card suspended")).toBeVisible();
@@ -243,5 +263,47 @@ describe("Suspending while studying", () => {
     await expect
       .element(screen.getByText("1 remembered · 0 forgotten · 1 suspended"))
       .toBeVisible();
+  });
+});
+
+describe("A session ended early", () => {
+  const cards = [
+    { id: 1, arabic: "أَب", plain: "أب", english: "father" },
+    card,
+    { id: 9, arabic: "تاج", plain: "تاج", english: "crown" },
+  ];
+  const steps: Step[] = [
+    { outcome: "remembered", before: undefined },
+    { outcome: "forgotten", before: { level: 1, reviewedAt: "2026-11-19T21:00:00.000Z" } },
+  ];
+
+  it("shows its summary with the counts so far, keeping the last card's header", async () => {
+    const screen = await renderSession(cards, {
+      dueCount: 3,
+      unstudiedCount: 0,
+      steps,
+      ended: true,
+    });
+    await expect.element(screen.getByText("Session ended")).toBeVisible();
+    await expect.element(screen.getByText("1 remembered · 1 forgotten")).toBeVisible();
+    await expect.element(screen.getByText("2 / 3 due")).toBeVisible();
+  });
+
+  it("goes back to its last card on undo, putting back that card's record", async () => {
+    const onRestore = vi.fn<(id: number, before: unknown) => void>();
+    const screen = await renderSession(cards, {
+      dueCount: 3,
+      unstudiedCount: 0,
+      steps,
+      ended: true,
+      onRestore,
+    });
+    await screen.getByRole("button", { name: "Undo" }).click();
+    expect(onRestore).toHaveBeenCalledExactlyOnceWith(card.id, steps[1].before);
+    await expect
+      .element(screen.getByRole("button", { name: card.plain, exact: true }))
+      .toBeVisible();
+    await expect.element(screen.getByText("2 / 3 due")).toBeVisible();
+    await expect.element(screen.getByText("Session ended")).not.toBeInTheDocument();
   });
 });

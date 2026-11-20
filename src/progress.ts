@@ -9,19 +9,17 @@ const OLD_KEY = "flashcards-progress-v1";
  * Card id → the card's level and last counted review, with `suspended: true` while the card is
  * suspended. A new card has no entry, or only the flag if it's suspended.
  */
-const progressSchema = z.partialRecord(
-  z.string(),
-  z.union([
-    z.object({
-      level: z.int().min(MIN_LEVEL).max(MAX_LEVEL),
-      reviewedAt: z.iso.datetime(),
-      suspended: z.literal(true).optional(),
-    }),
-    z.object({ suspended: z.literal(true) }),
-  ]),
-);
+const recordSchema = z.union([
+  z.object({
+    level: z.int().min(MIN_LEVEL).max(MAX_LEVEL),
+    reviewedAt: z.iso.datetime(),
+    suspended: z.literal(true).optional(),
+  }),
+  z.object({ suspended: z.literal(true) }),
+]);
+const progressSchema = z.partialRecord(z.string(), recordSchema);
 type Progress = z.infer<typeof progressSchema>;
-type CardRecord = NonNullable<Progress[string]>;
+type CardRecord = z.infer<typeof recordSchema>;
 
 /** Stored progress from its JSON text. Missing, malformed or invalid data gives empty progress. */
 export function parseProgress(text: string | null): Progress {
@@ -94,24 +92,34 @@ export function useProgress() {
   useEffect(() => save(progress), [progress]);
 
   /**
-   * Record an answer to card `id`, keeping its suspension, and return a function that restores the
-   * card's previous record (or its absence). Each card mounts afresh after every answer or undo, so
-   * `progress` here is current for the card being answered.
+   * Record an answer to card `id`, keeping its suspension, and return the card's previous record
+   * (undefined if it had none), for `restore`. Each card mounts afresh after every answer or undo,
+   * so `progress` here is current for the card being answered.
    */
   const answer = (id: number, remembered: boolean) => {
     const before = progress[id];
     const after = review(studied(before), remembered, Date.now());
     const record = before?.suspended ? { ...after, suspended: true as const } : after;
     setProgress((p) => withRecord(p, id, record));
-    return () => setProgress((p) => withRecord(p, id, before));
+    return before;
   };
 
-  /** Suspend card `id`, or unsuspend it, and return a function that restores its previous record. */
+  /** Suspend card `id`, or unsuspend it, and return its previous record, for `restore`. */
   const setSuspended = (id: number, suspended: boolean) => {
     const before = progress[id];
     setProgress((p) => withRecord(p, id, withSuspended(p[id], suspended)));
-    return () => setProgress((p) => withRecord(p, id, before));
+    return before;
   };
 
-  return { progress, answer, setSuspended };
+  /**
+   * Put back card `id`'s previous record, as `answer` or `setSuspended` returned it, or remove the
+   * card's record if `before` is undefined. A `before` that isn't a valid record, as from a damaged
+   * saved session, changes nothing.
+   */
+  const restore = (id: number, before: unknown) => {
+    const result = recordSchema.optional().safeParse(before);
+    if (result.success) setProgress((p) => withRecord(p, id, result.data));
+  };
+
+  return { progress, answer, setSuspended, restore };
 }
