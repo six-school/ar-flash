@@ -218,6 +218,23 @@
     {"id": 306, "arabic": "سَكَن", "plain": "سكن", "english": "Housing, residence; living (somewhere)"},
     {"id": 307, "arabic": "شُغْل", "plain": "شغل", "english": "Work, job (everyday word)"},
     {"id": 308, "arabic": "بِنْت أُخْت", "plain": "بنت أخت", "english": "Niece (sister’s daughter)"},
-    {"id": 309, "arabic": "يَتَكَلَّم / تَتَكَلَّم", "plain": "يتكلم / تتكلم", "english": "He speaks / she speaks"}
+    {"id": 309, "arabic": "يَتَكَلَّم / تَتَكَلَّم", "plain": "يتكلم / تتكلم", "english": "He speaks / she speaks"},
+    {"id": 310, "arabic": "ـي", "plain": "ـي", "english": "My"},
+    {"id": 311, "arabic": "ـكَ", "plain": "ـكَ", "english": "Your (m.)"},
+    {"id": 312, "arabic": "ـكِ", "plain": "ـكِ", "english": "Your (f.)"},
+    {"id": 313, "arabic": "ـنا", "plain": "ـنا", "english": "Our"},
+    {"id": 314, "arabic": "ـكُم", "plain": "ـكم", "english": "Your (m. pl.)"},
+    {"id": 315, "arabic": "ـكُنَّ", "plain": "ـكن", "english": "Your (f. pl.)"},
+    {"id": 316, "arabic": "ـهُم", "plain": "ـهم", "english": "Their (m.)"},
+    {"id": 317, "arabic": "ـهُنَّ", "plain": "ـهن", "english": "Their (f.)"},
+    {"id": 318, "arabic": "أَـ", "plain": "أـ", "english": "I, present tense, form 1"},
+    {"id": 319, "arabic": "تَـ", "plain": "تـ", "english": "You (m.) or she, present tense, form 1"},
+    {"id": 320, "arabic": "تَـ…ـين", "plain": "تـ…ـين", "english": "You (f.), present tense, form 1"},
+    {"id": 321, "arabic": "يَـ", "plain": "يـ", "english": "He, present tense, form 1"},
+    {"id": 322, "arabic": "نَـ", "plain": "نـ", "english": "We, present tense, form 1"},
+    {"id": 323, "arabic": "تَـ…ـون", "plain": "تـ…ـون", "english": "You (m. pl.), present tense, form 1"},
+    {"id": 324, "arabic": "تَـ…ـنَ", "plain": "تـ…ـن", "english": "You (f. pl.), present tense, form 1"},
+    {"id": 325, "arabic": "يَـ…ـون", "plain": "يـ…ـون", "english": "They (m.), present tense, form 1"},
+    {"id": 326, "arabic": "يَـ…ـنَ", "plain": "يـ…ـن", "english": "They (f.), present tense, form 1"}
   ]
 }

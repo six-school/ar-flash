@@ -229,6 +229,12 @@ export function Answer({
 }
 
 /**
+ * `text` with a word joiner after each "…", the gap for the stem in an affix card such as "تـ…ـين".
+ * A line may otherwise break after the "…" and split the affix.
+ */
+const keepGap = (text: string) => text.replaceAll("…", "…\u2060");
+
+/**
  * The Arabic word, shown plain or vowelled; tapping it toggles the vowels without flipping the
  * card. An invisible copy of the vowelled form sits in the same grid cell, so the word takes the
  * same space either way and toggling doesn't change the fitted font size.
@@ -258,9 +264,9 @@ function ArabicWord({
       className="inline-grid cursor-pointer"
     >
       <span aria-hidden className="invisible [grid-area:1/1]">
-        {arabic}
+        {keepGap(arabic)}
       </span>
-      <span className="[grid-area:1/1]">{vowels ? arabic : plain}</span>
+      <span className="[grid-area:1/1]">{keepGap(vowels ? arabic : plain)}</span>
     </button>
   );
 }

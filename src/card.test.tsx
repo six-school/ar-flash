@@ -141,6 +141,34 @@ describe("CardDetails", () => {
     expect(onNext).not.toHaveBeenCalled();
   });
 
+  it("keeps an affix card's gap for the stem on one line", async () => {
+    const affix = {
+      id: 324,
+      arabic: "تَـ…ـنَ",
+      plain: "تـ…ـن",
+      english: "You (f. pl.), present tense",
+    };
+    const screen = await render(
+      <div style={{ width: 400, height: 700 }}>
+        <CardDetails
+          card={affix}
+          review={undefined}
+          suspended={false}
+          onToggleSuspended={() => {}}
+          onBack={() => {}}
+        />
+      </div>,
+    );
+    const word = screen.getByRole("button", { name: /^تـ/ }).element();
+    const shown = word.lastElementChild!;
+    // Polled, because the text is fitted to the card after it renders.
+    await expect
+      .poll(
+        () => shown.getBoundingClientRect().height / parseFloat(getComputedStyle(shown).lineHeight),
+      )
+      .toBeLessThan(1.5);
+  });
+
   it("goes back from the back button", async () => {
     const onBack = vi.fn();
     const screen = await renderDetails({ onBack });
